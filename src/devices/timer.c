@@ -29,7 +29,7 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-struct thread* timer_list[10];
+static struct list timer_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -46,6 +46,8 @@ timer_init (void)
   outb (0x40, count >> 8);
 
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  list_init(&timer_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -94,12 +96,18 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+bool compare_sleep(const struct list_elem *a,
+                   const struct list_elem *b,
+                   void *aux UNUSED) {
+  return list_entry(a, struct thread, elem)->sleep_until
+         < list_entry(b, struct thread, elem)->sleep_until;
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-  int i;
   enum intr_level old_level;
 
   ASSERT (intr_get_level () == INTR_ON);
@@ -108,19 +116,11 @@ timer_sleep (int64_t ticks)
 
   struct thread *curr = thread_current();
   curr -> sleep_until = start + ticks;
-  for (i=0; i<10; i++)
-    if (timer_list[i] == curr)
-      break;
-    else if (timer_list[i] == NULL) {
-      timer_list[i] = curr;
-      break;
-    }
+  list_insert_ordered(&timer_list, &(curr->elem), compare_sleep, 0);
   thread_block();
 
   intr_set_level(old_level);
 }
-
-
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -155,7 +155,8 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   enum intr_level old_level;
-  int i, j;
+  struct list_elem *this, *next;
+  struct thread *this_thread;
   int64_t now = timer_ticks();
 
   ticks++;
@@ -163,18 +164,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   old_level = intr_disable();
 
-  for (i=0; i<9; i++)
-    if (timer_list[i] == NULL)
-      break;
-    else if (timer_list[i]->sleep_until < now+2) {
-      thread_unblock(timer_list[i]);
-      for (j=i; j<9; j++)
-        if(timer_list[j] == NULL)
-          break;
-        else
-          timer_list[j] = timer_list[j+1];
-      i--;
+  for (this=list_begin(&timer_list); this!=list_end(&timer_list); this=next) {
+    this_thread = list_entry(this, struct thread, elem);
+    next = list_next(this);
+    if (this_thread->sleep_until < now+2) {
+      list_remove(this);
+      thread_unblock(this_thread);
     }
+    else
+      break;
+  }
 
   intr_set_level(old_level);
 }
