@@ -3,3 +3,5 @@ src/*.pdf
 src/*.png
 build/
 tags
+bochsout.txt
+bochsrc.txt
