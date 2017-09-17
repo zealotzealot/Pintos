@@ -2,3 +2,5 @@
 src/*.pdf
 src/*.png
 build/
+bochsout.txt
+bochsrc.txt
