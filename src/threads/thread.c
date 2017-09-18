@@ -71,6 +71,12 @@ static void schedule (void);
 void schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+void print_string (char *string){
+  //enum intr_level old_level = intr_disable();
+  //printf("%s",string);
+  //intr_set_level(old_level);
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -199,6 +205,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  thread_yield();
   return tid;
 }
 
@@ -226,6 +233,14 @@ thread_block (void)
    be important: if the caller had disabled interrupts itself,
    it may expect that it can atomically unblock a thread and
    update other data. */
+
+bool compare_priority_desc(const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux UNUSED){
+  return list_entry(a, struct thread, elem)->priority
+        > list_entry(b, struct thread, elem)->priority;
+}
+  
 void
 thread_unblock (struct thread *t) 
 {
@@ -235,7 +250,8 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  //list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, compare_priority_desc, 0);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -303,8 +319,10 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (curr != idle_thread) 
-    list_push_back (&ready_list, &curr->elem);
+  if (curr != idle_thread){
+    //list_push_back (&ready_list, &curr->elem);
+    list_insert_ordered(&ready_list, &curr->elem, compare_priority_desc,0);
+  }
   curr->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -315,6 +333,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -488,6 +507,7 @@ next_thread_to_run (void)
 void
 schedule_tail (struct thread *prev) 
 {
+  print_string("schedule_tail in\n");
   struct thread *curr = running_thread ();
   
   ASSERT (intr_get_level () == INTR_OFF);
@@ -513,6 +533,7 @@ schedule_tail (struct thread *prev)
       ASSERT (prev != curr);
       palloc_free_page (prev);
     }
+  print_string("schedule tail out\n");
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and
@@ -525,6 +546,7 @@ schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
+  print_string("schedule in\n");
   struct thread *curr = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
@@ -536,6 +558,7 @@ schedule (void)
   if (curr != next)
     prev = switch_threads (curr, next);
   schedule_tail (prev); 
+  print_string("schedule out\n");
 }
 
 /* Returns a tid to use for a new thread. */
