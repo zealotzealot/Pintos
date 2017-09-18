@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int original_priority;
     int64_t sleep_until;
 
     /* Shared between thread.c and synch.c. */
@@ -133,5 +134,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void priority_donate(struct thread *, int);
+void priority_undonate();
 
 #endif /* threads/thread.h */
