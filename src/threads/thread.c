@@ -332,7 +332,9 @@ thread_yield (void)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  int waiting_priority = get_waiting_priority();
+
+  thread_current()->priority = new_priority>waiting_priority ? new_priority : waiting_priority;
   thread_current()->original_priority = new_priority;
   thread_yield();
 }
@@ -582,24 +584,11 @@ allocate_tid (void)
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 
-void priority_donate(struct thread *donee, int priority) {
-  if (donee -> priority < priority) {
-    donee -> priority = priority;
-    if (true) { // TODO check donee is in ready list.
-      list_remove(&(donee->elem));
-      list_insert_ordered(&ready_list, &(donee->elem), compare_priority_desc, 0);
-    }
-    if (donee->waiting_lock != NULL)
-      priority_donate(donee->waiting_lock->holder, priority);
-  }
-}
 
-
-
-void priority_undonate() {
+int get_waiting_priority() {
   enum intr_level old_level;
   struct thread *curr = thread_current();
-  int max_priority = curr -> original_priority;
+  int max_priority = PRI_MIN;
   int waiting_priority;
   struct lock **locks = curr -> holding_locks;
   struct list waiting_threads;
@@ -617,7 +606,35 @@ void priority_undonate() {
       max_priority = waiting_priority;
   }
 
-  curr->priority = max_priority;
+  return max_priority;
+  intr_set_level(old_level);
+}
+
+
+
+void priority_donate(struct thread *donee, int priority) {
+  if (donee -> priority < priority) {
+    donee -> priority = priority;
+    if (true) { // TODO check donee is in ready list.
+      list_remove(&(donee->elem));
+      list_insert_ordered(&ready_list, &(donee->elem), compare_priority_desc, 0);
+    }
+    if (donee->waiting_lock != NULL)
+      priority_donate(donee->waiting_lock->holder, priority);
+  }
+}
+
+
+
+void priority_undonate() {
+  enum intr_level old_level;
+  struct thread *curr = thread_current();
+  int waiting_priority, original_priority;
+
+  old_level = intr_disable();
+  waiting_priority = get_waiting_priority();
+  original_priority = curr->original_priority;
+  curr->priority = original_priority>waiting_priority ? original_priority : waiting_priority;
   intr_set_level(old_level);
 }
 
