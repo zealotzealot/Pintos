@@ -616,7 +616,6 @@ void priority_undonate() {
   }
 
   curr->priority = max_priority;
-  thread_yield();
   intr_set_level(old_level);
 }
 
