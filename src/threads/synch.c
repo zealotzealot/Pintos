@@ -194,6 +194,9 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
+  int i;
+  struct lock **locks = thread_current() -> holding_locks;
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
@@ -202,6 +205,13 @@ lock_acquire (struct lock *lock)
     priority_donate(lock->holder, thread_current()->priority);
   }
   sema_down (&lock->semaphore);
+  
+  for (i=0; i<10; i++)
+    if (locks[i] == NULL) {
+      locks[i] = lock;
+      break;
+    }
+
   lock->holder = thread_current ();
 }
 
@@ -234,9 +244,16 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
+  int i;
+  struct lock **locks = thread_current()->holding_locks;
+
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  for (i=0; i<10; i++)
+    if (locks[i] == lock) {
+      locks[i] = NULL;
+    }
   lock->holder = NULL;
   priority_undonate();
   sema_up (&lock->semaphore);

@@ -593,8 +593,30 @@ void priority_donate(struct thread *donee, int priority) {
 }
 
 
+
 void priority_undonate() {
-  thread_current()->priority = thread_current()->original_priority;
+  enum intr_level old_level;
+  struct thread *curr = thread_current();
+  int max_priority = curr -> original_priority;
+  int waiting_priority;
+  struct lock **locks = curr -> holding_locks;
+  struct list waiting_threads;
+  int i;
+
+  old_level = intr_disable();
+  for (i=0; i<10; i++) {
+    if (locks[i] == NULL)
+      continue;
+    waiting_threads = locks[i]->semaphore.waiters;
+//    if (list_size(&waiting_threads) == 0)
+//      continue;
+    waiting_priority = list_entry(list_begin(&waiting_threads), struct thread, elem)->priority;
+    if (waiting_priority > max_priority)
+      max_priority = waiting_priority;
+  }
+
+  curr->priority = max_priority;
   thread_yield();
+  intr_set_level(old_level);
 }
 

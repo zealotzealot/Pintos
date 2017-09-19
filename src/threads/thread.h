@@ -89,6 +89,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     int original_priority;
+    struct lock* holding_locks[10];
     int64_t sleep_until;
 
     /* Shared between thread.c and synch.c. */
@@ -140,6 +141,6 @@ bool compare_priority_desc(const struct list_elem *,
                            void * UNUSED);
 
 void priority_donate(struct thread *, int);
-void priority_undonate();
+void priority_undonate(void);
 
 #endif /* threads/thread.h */
