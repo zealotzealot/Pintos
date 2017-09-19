@@ -90,6 +90,7 @@ struct thread
     int priority;                       /* Priority. */
     int original_priority;
     struct lock* holding_locks[10];
+    struct lock* waiting_lock;
     int64_t sleep_until;
 
     /* Shared between thread.c and synch.c. */

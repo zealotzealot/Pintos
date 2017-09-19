@@ -589,6 +589,8 @@ void priority_donate(struct thread *donee, int priority) {
       list_remove(&(donee->elem));
       list_insert_ordered(&ready_list, &(donee->elem), compare_priority_desc, 0);
     }
+    if (donee->waiting_lock != NULL)
+      priority_donate(donee->waiting_lock->holder, priority);
   }
 }
 
