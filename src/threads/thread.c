@@ -462,6 +462,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
+  list_init(&t->holding_locks);
   t->magic = THREAD_MAGIC;
 }
 
@@ -590,15 +591,13 @@ int get_waiting_priority() {
   struct thread *curr = thread_current();
   int max_priority = PRI_MIN;
   int waiting_priority;
-  struct lock **locks = curr -> holding_locks;
+  struct list *locks = &(curr -> holding_locks);
+  struct list_elem *this;
   struct list waiting_threads;
-  int i;
 
   old_level = intr_disable();
-  for (i=0; i<10; i++) {
-    if (locks[i] == NULL)
-      continue;
-    waiting_threads = locks[i]->semaphore.waiters;
+  for (this=list_begin(locks); this!=list_end(locks); this=list_next(this)) {
+    waiting_threads = list_entry(this, struct lock, elem)->semaphore.waiters;
 //    if (list_size(&waiting_threads) == 0)
 //      continue;
     waiting_priority = list_entry(list_begin(&waiting_threads), struct thread, elem)->priority;
