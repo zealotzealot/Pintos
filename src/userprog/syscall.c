@@ -43,7 +43,7 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   printf ("system call!\n");
-  printf ("%s\n",thread_current()->name);
-  hex_dump ( f->esp, f->esp, PHYS_BASE - f->esp, true);
+  //printf ("%s\n",thread_current()->name);
+  //hex_dump ( f->esp, f->esp, PHYS_BASE - f->esp, true);
   thread_exit ();
 }
