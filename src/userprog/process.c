@@ -21,6 +21,53 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+void argument_pass(char *string, void **esp){
+  
+  int argc=0;
+  char **argv, *token, *save_ptr;
+  
+  for(token = strtok_r (string, " ", &save_ptr); token!=NULL;
+      token=strtok_r (NULL, " ", &save_ptr)){
+    
+    ++argc;
+
+    if(argc == 1) { argv = (char **) malloc(sizeof(char *) * argc); }
+    else { argv = (char **) realloc(argv, sizeof(char *) * argc); }
+    
+    argv[ argc - 1 ] = (char *) malloc(sizeof(char) * strlen(token));
+    strlcpy( argv[argc -1], token, strlen(token)+1 );
+
+  }
+
+  int i, argv_addr[argc];
+  
+  for(i=argc-1; i>=0; i--){
+    *esp -= strlen(argv[i])+1;
+    memcpy( *esp, argv[i], strlen(argv[i])+1 );
+    argv_addr[i] = *esp;
+  }
+
+  *esp = (int)*esp & 0xfffffffc; //word-align
+  
+  for(i=argc; i>=0; i--){
+    *esp -= sizeof(char *);
+    
+    if(i < argc){
+      //memcpy( *esp, argv_addr[i], sizeof(char *) );
+      *((int *)*esp) = argv_addr[i];
+    }
+  }
+
+  memcpy(*esp-4, esp, sizeof(char *));
+  *esp -= 4;
+
+  memcpy(*esp-4, &argc, sizeof(int));
+  *esp -= 4;
+
+  *esp -= 4; // Make return address' space
+
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -50,7 +97,10 @@ process_execute (const char *file_name)
 static void
 start_process (void *f_name)
 {
-  char *file_name = f_name;
+  char *save_ptr, *file_name = malloc(sizeof(char) * strlen(f_name));
+  strlcpy(file_name, f_name, strlen(f_name)+1);
+  file_name = strtok_r (file_name, " ", &save_ptr);
+
   struct intr_frame if_;
   bool success;
 
@@ -62,9 +112,17 @@ start_process (void *f_name)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
+  
+  if (!success){
+    free(file_name);
     thread_exit ();
+  }
+
+  argument_pass(f_name, &if_.esp);
+  
+  //hex_dump (if_.esp, if_.esp, PHYS_BASE-if_.esp, true);
+  //palloc_free_page (file_name);
+  free(file_name);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
