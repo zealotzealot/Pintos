@@ -462,6 +462,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->original_priority = priority;
+  list_init(&t->holding_locks);
   t->magic = THREAD_MAGIC;
 }
 
@@ -511,7 +512,6 @@ next_thread_to_run (void)
 void
 schedule_tail (struct thread *prev) 
 {
-  print_string("schedule_tail in\n");
   struct thread *curr = running_thread ();
   
   ASSERT (intr_get_level () == INTR_OFF);
@@ -537,7 +537,6 @@ schedule_tail (struct thread *prev)
       ASSERT (prev != curr);
       palloc_free_page (prev);
     }
-  print_string("schedule tail out\n");
 }
 
 /* Schedules a new process.  At entry, interrupts must be off and
@@ -550,7 +549,6 @@ schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
-  print_string("schedule in\n");
   struct thread *curr = running_thread ();
   struct thread *next = next_thread_to_run ();
   struct thread *prev = NULL;
@@ -562,7 +560,6 @@ schedule (void)
   if (curr != next)
     prev = switch_threads (curr, next);
   schedule_tail (prev); 
-  print_string("schedule out\n");
 }
 
 /* Returns a tid to use for a new thread. */
@@ -590,18 +587,16 @@ int get_waiting_priority() {
   struct thread *curr = thread_current();
   int max_priority = PRI_MIN;
   int waiting_priority;
-  struct lock **locks = curr -> holding_locks;
-  struct list waiting_threads;
-  int i;
+  struct list *locks = &(curr -> holding_locks);
+  struct list_elem *this;
+  struct list *waiting_threads;
 
   old_level = intr_disable();
-  for (i=0; i<10; i++) {
-    if (locks[i] == NULL)
+  for (this=list_begin(locks); this!=list_end(locks); this=list_next(this)) {
+    waiting_threads = &(list_entry(this, struct lock, elem)->semaphore.waiters);
+    if (list_size(waiting_threads) == 0)
       continue;
-    waiting_threads = locks[i]->semaphore.waiters;
-//    if (list_size(&waiting_threads) == 0)
-//      continue;
-    waiting_priority = list_entry(list_begin(&waiting_threads), struct thread, elem)->priority;
+    waiting_priority = list_entry(list_begin(waiting_threads), struct thread, elem)->priority;
     if (waiting_priority > max_priority)
       max_priority = waiting_priority;
   }
