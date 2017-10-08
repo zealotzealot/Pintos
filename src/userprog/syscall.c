@@ -42,10 +42,47 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call!\n");
-  //printf ("%s\n",thread_current()->name);
-  //hex_dump ( f->esp, f->esp, PHYS_BASE - f->esp, true);
-  thread_exit ();
+  switch(*(int *)(f->esp)) {
+    case SYS_HALT:
+      printf("halt\n");
+      break;
+    case SYS_EXIT:
+      printf("exit\n");
+      break;
+    case SYS_EXEC:
+      printf("exec\n");
+      break;
+    case SYS_WAIT:
+      printf("wait\n");
+      break;
+    case SYS_CREATE:
+      printf("create\n");
+      break;
+    case SYS_REMOVE:
+      printf("remove\n");
+      break;
+    case SYS_OPEN:
+      printf("open\n");
+      break;
+    case SYS_FILESIZE:
+      printf("filesize\n");
+      break;
+    case SYS_READ:
+      printf("read\n");
+      break;
+    case SYS_WRITE:
+      printf("write\n");
+      break;
+    case SYS_SEEK:
+      printf("seek\n");
+      break;
+    case SYS_TELL:
+      printf("tell\n");
+      break;
+    case SYS_CLOSE:
+      printf("close\n");
+      break;
+  }
 }
 
 
@@ -87,7 +124,6 @@ int open (const char *file) {
 
 int filesize (int fd) {
 }
-
 
 
 
