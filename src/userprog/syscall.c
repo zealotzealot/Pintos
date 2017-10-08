@@ -71,7 +71,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("read\n");
       break;
     case SYS_WRITE:
-      printf("write\n");
+      write(*((int *)(f->esp)+1),
+            *((int *)(f->esp)+2),
+            *((int *)(f->esp)+3));
       break;
     case SYS_SEEK:
       printf("seek\n");
@@ -135,6 +137,13 @@ int read (int fd, void *buffer, unsigned size) {
 
 
 int write (int fd, const void *buffer, unsigned size) {
+  // Write to console when fd == 1
+  if (fd == 1) {
+    putbuf(buffer, size);
+    return size;
+  }
+  // TODO: Write to file when fd != 1
+  return -1;
 }
 
 
