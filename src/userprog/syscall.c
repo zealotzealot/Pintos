@@ -44,7 +44,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   switch(*(int *)(f->esp)) {
     case SYS_HALT:
-      printf("halt\n");
+      halt();
       break;
     case SYS_EXIT:
       exit(*((int *)(f->esp)+1));
@@ -90,6 +90,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 
 void halt (void) {
+  power_off();
 }
 
 
