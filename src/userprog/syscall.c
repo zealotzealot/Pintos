@@ -47,7 +47,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("halt\n");
       break;
     case SYS_EXIT:
-      printf("exit\n");
+      exit(*((int *)(f->esp)+1));
       break;
     case SYS_EXEC:
       printf("exec\n");
@@ -93,6 +93,8 @@ void halt (void) {
 
 
 void exit (int status) {
+  printf("%s: exit(%d)\n", thread_current()->name, status);
+  thread_exit();
 }
 
 
