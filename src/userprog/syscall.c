@@ -5,7 +5,22 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "filesys/filesys.h"
+
 static void syscall_handler (struct intr_frame *);
+void halt(void);
+void exit(int);
+pid_t exec(const char *);
+int wait(pid_t);
+bool create(const char *, unsigned);
+bool remove(const char *);
+int open(const char *);
+int filesize(int);
+int read(int, void *, unsigned);
+int write(int, const void *, unsigned);
+void seek(int, unsigned);
+unsigned tell(int);
+void close(int);
 
 //Read a byte at user virtual address UADDR
 static int
@@ -56,10 +71,11 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("wait\n");
       break;
     case SYS_CREATE:
-      printf("create\n");
+      f->eax = create(*((int *)(f->esp)+1),
+               *((int *)(f->esp)+2));
       break;
     case SYS_REMOVE:
-      printf("remove\n");
+      f->eax = remove(*((int *)(f->esp)+1));
       break;
     case SYS_OPEN:
       printf("open\n");
@@ -71,9 +87,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("read\n");
       break;
     case SYS_WRITE:
-      write(*((int *)(f->esp)+1),
-            *((int *)(f->esp)+2),
-            *((int *)(f->esp)+3));
+      f->eax = write(*((int *)(f->esp)+1),
+               *((int *)(f->esp)+2),
+               *((int *)(f->esp)+3));
       break;
     case SYS_SEEK:
       printf("seek\n");
@@ -113,11 +129,13 @@ int wait (pid_t pid) {
 
 
 bool create (const char *file, unsigned initial_size) {
+  return filesys_create(file, initial_size);
 }
 
 
 
 bool remove (const char *file) {
+  return filesys_remove(file);
 }
 
 
