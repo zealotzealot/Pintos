@@ -7,6 +7,15 @@
 
 #include "filesys/filesys.h"
 
+
+
+struct file_desc {
+  void *file;
+  bool closed;
+};
+
+
+
 static void syscall_handler (struct intr_frame *);
 void halt(void);
 void exit(int);
@@ -21,6 +30,12 @@ int write(int, const void *, unsigned);
 void seek(int, unsigned);
 unsigned tell(int);
 void close(int);
+
+
+struct file_desc file_desc_list[100];
+int file_desc_idx=2;
+
+
 
 //Read a byte at user virtual address UADDR
 static int
@@ -78,7 +93,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = remove(*((int *)(f->esp)+1));
       break;
     case SYS_OPEN:
-      printf("open\n");
+      f->eax = open(*((int *)(f->esp)+1));
       break;
     case SYS_FILESIZE:
       printf("filesize\n");
@@ -98,7 +113,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("tell\n");
       break;
     case SYS_CLOSE:
-      printf("close\n");
+      close(*((int *)(f->esp)+1));
       break;
   }
 }
@@ -141,6 +156,8 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
+  file_desc_list[file_desc_idx].file = filesys_open(file);
+  return file_desc_idx++;
 }
 
 
@@ -178,4 +195,14 @@ unsigned tell (int fd) {
 
 
 void close (int fd) {
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    return;
+
+  free(target->file);
+  target->closed = true;
 }
