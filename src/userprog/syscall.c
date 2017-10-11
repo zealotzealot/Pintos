@@ -17,6 +17,7 @@ struct file_desc {
 
 
 
+struct file_desc * get_file_desc(int);
 static void syscall_handler (struct intr_frame *);
 void halt(void);
 pid_t exec(const char *);
@@ -63,6 +64,20 @@ put_user(uint8_t *udst, uint8_t byte)
   return error_code != -1;
 }
 
+
+struct file_desc * get_file_desc(int fd) {
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *result = &file_desc_list[fd];
+
+  if (result->closed)
+    exit(-1);
+
+  return result;
+}
+
+
 void
 syscall_init (void) 
 {
@@ -99,7 +114,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = open(*((int *)(f->esp)+1));
       break;
     case SYS_FILESIZE:
-      printf("filesize\n");
+      f->eax = filesize(*((int *)(f->esp)+1));
       break;
     case SYS_READ:
       f->eax = read(*((int *)(f->esp)+1),
@@ -112,10 +127,11 @@ syscall_handler (struct intr_frame *f UNUSED)
                *((int *)(f->esp)+3));
       break;
     case SYS_SEEK:
-      printf("seek\n");
+      seek(*((int *)(f->esp)+1),
+           *((int *)(f->esp)+2));
       break;
     case SYS_TELL:
-      printf("tell\n");
+      f->eax = tell(*((int *)(f->esp)+1));
       break;
     case SYS_CLOSE:
       close(*((int *)(f->esp)+1));
@@ -170,6 +186,9 @@ int open (const char *file) {
 
 
 int filesize (int fd) {
+  struct file_desc *target = get_file_desc(fd);
+
+  return file_length(target->file);
 }
 
 
@@ -178,13 +197,8 @@ int read (int fd, void *buffer, unsigned size) {
   if (fd == 0) {
     return input_getc();
   }
-  if (fd<2 || fd>=file_desc_idx)
-    exit(-1);
 
-  struct file_desc *target = &file_desc_list[fd];
-
-  if (target->closed)
-    exit(-1);
+  struct file_desc *target = get_file_desc(fd);
 
   return file_read(target->file, buffer, size);
 }
@@ -197,13 +211,8 @@ int write (int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     return size;
   }
-  if (fd<2 || fd>=file_desc_idx)
-    exit(-1);
 
-  struct file_desc *target = &file_desc_list[fd];
-
-  if (target->closed)
-    exit(-1);
+  struct file_desc *target = get_file_desc(fd);
 
   return file_write(target->file, buffer, size);
 }
@@ -211,11 +220,17 @@ int write (int fd, const void *buffer, unsigned size) {
 
 
 void seek (int fd, unsigned position) {
+  struct file_desc *target = get_file_desc(fd);
+
+  file_seek(target->file, position);
 }
 
 
 
 unsigned tell (int fd) {
+  struct file_desc *target = get_file_desc(fd);
+
+  return file_tell(target->file);
 }
 
 
@@ -224,10 +239,7 @@ void close (int fd) {
   if (fd<2 || fd>=file_desc_idx)
     exit(-1);
 
-  struct file_desc *target = &file_desc_list[fd];
-
-  if (target->closed)
-    return;
+  struct file_desc *target = get_file_desc(fd);
 
   file_close(target->file);
   target->closed = true;
