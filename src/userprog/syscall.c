@@ -8,6 +8,15 @@
 #include "filesys/filesys.h"
 #include "userprog/process.h"
 
+
+
+struct file_desc {
+  void *file;
+  bool closed;
+};
+
+
+
 static void syscall_handler (struct intr_frame *);
 void halt(void);
 pid_t exec(const char *);
@@ -21,6 +30,12 @@ int write(int, const void *, unsigned);
 void seek(int, unsigned);
 unsigned tell(int);
 void close(int);
+
+
+struct file_desc file_desc_list[100];
+int file_desc_idx=2;
+
+
 
 //Read a byte at user virtual address UADDR
 static int
@@ -81,13 +96,15 @@ syscall_handler (struct intr_frame *f UNUSED)
       f->eax = remove(*((int *)(f->esp)+1));
       break;
     case SYS_OPEN:
-      printf("open\n");
+      f->eax = open(*((int *)(f->esp)+1));
       break;
     case SYS_FILESIZE:
       printf("filesize\n");
       break;
     case SYS_READ:
-      printf("read\n");
+      f->eax = read(*((int *)(f->esp)+1),
+                    *((int *)(f->esp)+2),
+                    *((int *)(f->esp)+3));
       break;
     case SYS_WRITE:
       f->eax = write(*((int *)(f->esp)+1),
@@ -101,7 +118,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("tell\n");
       break;
     case SYS_CLOSE:
-      printf("close\n");
+      close(*((int *)(f->esp)+1));
       break;
   }
 }
@@ -146,6 +163,8 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
+  file_desc_list[file_desc_idx].file = filesys_open(file);
+  return file_desc_idx++;
 }
 
 
@@ -156,6 +175,18 @@ int filesize (int fd) {
 
 
 int read (int fd, void *buffer, unsigned size) {
+  if (fd == 0) {
+    return input_getc();
+  }
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    exit(-1);
+
+  return file_read(target->file, buffer, size);
 }
 
 
@@ -166,8 +197,15 @@ int write (int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     return size;
   }
-  // TODO: Write to file when fd != 1
-  return -1;
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    exit(-1);
+
+  return file_write(target->file, buffer, size);
 }
 
 
@@ -183,4 +221,14 @@ unsigned tell (int fd) {
 
 
 void close (int fd) {
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    return;
+
+  file_close(target->file);
+  target->closed = true;
 }
