@@ -99,7 +99,9 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("filesize\n");
       break;
     case SYS_READ:
-      printf("read\n");
+      f->eax = read(*((int *)(f->esp)+1),
+                    *((int *)(f->esp)+2),
+                    *((int *)(f->esp)+3));
       break;
     case SYS_WRITE:
       f->eax = write(*((int *)(f->esp)+1),
@@ -168,6 +170,18 @@ int filesize (int fd) {
 
 
 int read (int fd, void *buffer, unsigned size) {
+  if (fd == 0) {
+    return input_getc();
+  }
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    exit(-1);
+
+  return file_read(target->file, buffer, size);
 }
 
 
@@ -178,8 +192,15 @@ int write (int fd, const void *buffer, unsigned size) {
     putbuf(buffer, size);
     return size;
   }
-  // TODO: Write to file when fd != 1
-  return -1;
+  if (fd<2 || fd>=file_desc_idx)
+    exit(-1);
+
+  struct file_desc *target = &file_desc_list[fd];
+
+  if (target->closed)
+    exit(-1);
+
+  return file_write(target->file, buffer, size);
 }
 
 
@@ -203,6 +224,6 @@ void close (int fd) {
   if (target->closed)
     return;
 
-  free(target->file);
+  file_close(target->file);
   target->closed = true;
 }
