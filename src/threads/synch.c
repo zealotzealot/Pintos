@@ -128,6 +128,33 @@ sema_up (struct semaphore *sema)
   intr_set_level (old_level);
 }
 
+void
+sema_up_all (struct semaphore *sema)
+{
+  enum intr_level old_level;
+  struct thread *unblocked_thread = NULL;
+  int max_priority = -1;
+
+  ASSERT (sema != NULL);
+  old_level = intr_disable ();
+
+  while (!list_empty (&sema->waiters)) {
+    unblocked_thread = list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem);
+    
+    if(unblocked_thread->priority > max_priority)
+      max_priority = unblocked_thread->priority;  
+    
+    thread_unblock(unblocked_thread);
+    sema->value++;
+  }
+  
+  if (max_priority > thread_current()->priority)
+      thread_yield();
+  
+  intr_set_level (old_level);
+}
+
 static void sema_test_helper (void *sema_);
 
 /* Self-test for semaphores that makes control "ping-pong"
@@ -254,6 +281,17 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
   priority_undonate();
   sema_up (&lock->semaphore);
+}
+
+void
+lock_release_all (void)
+{
+  struct list *locks = &thread_current()->holding_locks;
+  struct list_elem *e;  
+  
+  for(e = list_begin(locks); e!=list_end(locks); e=list_next(e)){
+    lock_release (list_entry(e, struct lock, elem));
+  }
 }
 
 /* Returns true if the current thread holds LOCK, false
