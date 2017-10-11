@@ -296,6 +296,8 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
+  lock_release_all();
+
 #ifdef USERPROG
   process_exit ();
 #endif

@@ -6,10 +6,10 @@
 #include "threads/vaddr.h"
 
 #include "filesys/filesys.h"
+#include "userprog/process.h"
 
 static void syscall_handler (struct intr_frame *);
 void halt(void);
-void exit(int);
 pid_t exec(const char *);
 int wait(pid_t);
 bool create(const char *, unsigned);
@@ -62,13 +62,16 @@ syscall_handler (struct intr_frame *f UNUSED)
       halt();
       break;
     case SYS_EXIT:
+      //printf("exit\n");
       exit(*((int *)(f->esp)+1));
       break;
     case SYS_EXEC:
-      printf("exec\n");
+      //printf("exec\n");
+      f->eax = exec(*((int *)(f->esp)+1));
       break;
     case SYS_WAIT:
-      printf("wait\n");
+      //printf("wait\n");
+      f->eax = wait(*((int *)(f->esp)+1));
       break;
     case SYS_CREATE:
       f->eax = create(*((int *)(f->esp)+1),
@@ -113,17 +116,19 @@ void halt (void) {
 
 void exit (int status) {
   printf("%s: exit(%d)\n", thread_current()->name, status);
+  set_exit_status (status);
   thread_exit();
 }
 
-
-
 pid_t exec (const char *cmd_line) {
+  int pid = process_execute (cmd_line);
+  return pid;
 }
 
 
 
 int wait (pid_t pid) {
+  return process_wait (pid);
 }
 
 

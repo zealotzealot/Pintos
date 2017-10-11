@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -17,9 +18,71 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
+
+struct process_sema
+{
+  int pid;
+  int alive; //0 means process die, 1 means not
+  int parent_pid;
+  int exit_status;
+  int load_success; //0 means not load yet or success, -1 : fail
+  struct semaphore sema;
+  struct list_elem elem;
+};
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+void process_sema_init (struct process_sema *);
+bool check_pid_to_process_sema (int);
+struct process_sema* pid_to_process_sema (int);
+void set_exit_status (int);
+
+int init_check = 0;
+static struct list process_sema_list;
+
+void process_sema_init (struct process_sema *process_sema){
+  sema_init (&process_sema->sema, 0);
+  process_sema->alive = 1;
+  process_sema->exit_status = -1;
+  process_sema->parent_pid = -1;
+  process_sema->load_success = 0;
+}
+
+void set_exit_status (int status){
+  ASSERT (check_pid_to_process_sema (thread_current()->tid));
+  struct process_sema *process_sema
+          = pid_to_process_sema (thread_current()->tid);
+  
+  process_sema->exit_status = status;
+}
+
+bool
+check_pid_to_process_sema (int pid){
+  struct list_elem *e;
+  
+  for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
+    if(list_entry(e, struct process_sema, elem)->pid == pid){
+      return true;
+    }
+  }
+  return false;
+}
+
+struct process_sema*
+pid_to_process_sema (int pid){
+  struct list_elem *e;
+  
+  //printf("pid_to_process_sema, %s(%d) %d\n",thread_current()->name,thread_current()->tid,pid);
+  for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
+    if(list_entry(e, struct process_sema, elem)->pid == pid){
+      //printf("find!! %d %d\n",pid, list_entry(e, struct process_sema, elem)->pid);
+      return list_entry(e, struct process_sema, elem);
+    }
+  }
+  //printf("not found!!\n");
+  return -1;
+}
 
 void argument_pass(char *string, void **esp){
   
@@ -75,23 +138,56 @@ void argument_pass(char *string, void **esp){
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  //printf("process_execute!! %s(%d)->%s\n",thread_current()->name,thread_current()->tid,file_name);
+  char *fn_copy, *real_file_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  real_file_name = palloc_get_page (0);
+  if (fn_copy == NULL || real_file_name == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-
+  strlcpy (real_file_name, file_name, PGSIZE);
+  
   char *save_ptr;
-  file_name = strtok_r (file_name, " ", &save_ptr);
+  real_file_name = strtok_r (real_file_name, " ", &save_ptr);
+  
+  if (init_check != 1){
+    init_check = 1;
+    list_init (&process_sema_list);
+    //printf("process_sema list init! %s\n",thread_current()->name);
+  }
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR){
+    palloc_free_page (fn_copy);
+    palloc_free_page (real_file_name);
+  }
+
+  struct process_sema *process_sema;
+  if (!check_pid_to_process_sema(tid)){ //부모가 자식보다 먼저 schedule되는 case
+    process_sema = malloc (sizeof(struct process_sema));
+    process_sema_init (process_sema);
+  
+    process_sema->pid = tid;
+    process_sema->parent_pid = thread_current()->tid;
+    list_push_back (&process_sema_list, &process_sema->elem);
+    //printf("push %s %d\n",file_name,tid);
+  }
+  else{//자식이 부모보다 먼저
+    process_sema = pid_to_process_sema(tid);
+
+    if(process_sema->load_success == -1){
+      return -1;
+    }
+
+    process_sema->parent_pid = thread_current()->tid;
+  }
+  
+  //printf("%s->%s tid : %d\n\n",thread_current()->name,file_name,tid);
   return tid;
 }
 
@@ -100,12 +196,24 @@ process_execute (const char *file_name)
 static void
 start_process (void *f_name)
 {
+  //printf("start process!! %s\n",thread_current()->name);
   char *save_ptr, *file_name = malloc(sizeof(char) * strlen(f_name));
   strlcpy(file_name, f_name, strlen(f_name)+1);
   file_name = strtok_r (file_name, " ", &save_ptr);
 
   struct intr_frame if_;
   bool success;
+
+  int pid = thread_current()->tid;
+  if (!check_pid_to_process_sema(pid)){ //자식이 부모보다 먼저 schedule되는 case
+    struct process_sema *process_sema;
+    process_sema = malloc (sizeof(struct process_sema));
+    process_sema_init (process_sema);
+  
+    process_sema->pid = pid;
+    list_push_back (&process_sema_list, &process_sema->elem);
+    //printf("push %s %d\n",file_name,pid);
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -117,8 +225,11 @@ start_process (void *f_name)
   /* If load failed, quit. */
   
   if (!success){
+    struct process_sema *process_sema
+                          = pid_to_process_sema (thread_current()->tid);
+    process_sema->load_success = -1;
     free(file_name);
-    thread_exit ();
+    thread_exit();
   }
 
   argument_pass(f_name, &if_.esp);
@@ -149,6 +260,32 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  //printf("process_wait!! %s %d\n",thread_current()->name,child_tid);
+  if(init_check == 1){
+    
+    if  (!check_pid_to_process_sema (child_tid)){
+      //printf("check out!\n");
+      return -1;
+    }
+
+    struct process_sema *process_sema;
+    process_sema = pid_to_process_sema (child_tid);
+
+    if(process_sema->parent_pid != thread_current()->tid){
+      //printf("parent out! %d %d\n",process_sema->parent_pid, thread_current()->tid);
+      return -1;
+    }
+    
+    if(process_sema->alive){
+      sema_down (&process_sema->sema);
+    }
+
+    int exit_status = process_sema->exit_status;
+    list_remove(&(process_sema->elem));
+    free(process_sema);
+    
+    return exit_status;
+  }
   return -1;
 }
 
@@ -156,6 +293,16 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+  //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
+
+  if(init_check == 1){
+    struct process_sema *process_sema
+            = pid_to_process_sema (thread_current()->tid);
+
+    sema_up_all (&process_sema->sema);
+    process_sema->alive = 0;
+  }
+
   struct thread *curr = thread_current ();
   uint32_t *pd;
 
@@ -524,3 +671,5 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+
+
