@@ -32,7 +32,7 @@ int file_desc_idx=2;
 
 //Read a byte at user virtual address UADDR
 static int
-get_user (const uint8_t *uaddr)
+get_user_one_byte (const uint8_t *uaddr)
 {
   if(uaddr >= PHYS_BASE)
     return -1;
@@ -42,10 +42,24 @@ get_user (const uint8_t *uaddr)
       : "=&a" (result) : "m" (*uaddr));
   return result;
 }
+  
+static int
+get_user (const uint8_t *uaddr)
+{
+  int total_result=0, result, i;
+  for(i=0; i<4; i++){
+    result = get_user_one_byte(((void *)uaddr)+i);
+    if(result == -1){
+      exit(-1);
+    }
+    total_result += result<<(i*8);
+  }
+  return total_result;
+}
 
 //Writes Byte to user address UDST
 static bool
-put_user(uint8_t *udst, uint8_t byte)
+put_user_one_byte(uint8_t *udst, uint8_t byte)
 {
   if(udst >= PHYS_BASE)
     return false;
@@ -54,6 +68,17 @@ put_user(uint8_t *udst, uint8_t byte)
   asm ("movl $1f, %0; movb %b2, %1; 1:"
       : "=&a" (error_code), "=m" (*udst) : "q" (byte));
   return error_code != -1;
+}
+
+static bool
+put_user(uint8_t *udst, uint8_t value)
+{
+  int i;
+  for (i=0; i<4; i++){
+    if (!put_user_one_byte (((void *)udst)+i,*(char *)((void *)&value+i)&0xff)){
+      exit(-1);
+    }
+  }
 }
 
 
@@ -88,54 +113,54 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  switch(*(int *)(f->esp)) {
+  switch( get_user ((int *)(f->esp))) {
     case SYS_HALT:
       halt();
       break;
     case SYS_EXIT:
       //printf("exit\n");
-      exit(*((int *)(f->esp)+1));
+      exit (get_user ((int *)(f->esp)+1));
       break;
     case SYS_EXEC:
       //printf("exec\n");
-      f->eax = exec(*((int *)(f->esp)+1));
+      f->eax = exec (get_user ((int *)(f->esp)+1));
       break;
     case SYS_WAIT:
       //printf("wait\n");
-      f->eax = wait(*((int *)(f->esp)+1));
+      f->eax = wait (get_user ((int *)(f->esp)+1));
       break;
     case SYS_CREATE:
-      f->eax = create(*((int *)(f->esp)+1),
-               *((int *)(f->esp)+2));
+      f->eax = create (get_user ((int *)(f->esp)+1),
+               get_user ((int *)(f->esp)+2));
       break;
     case SYS_REMOVE:
-      f->eax = remove(*((int *)(f->esp)+1));
+      f->eax = remove (get_user ((int *)(f->esp)+1));
       break;
     case SYS_OPEN:
-      f->eax = open(*((int *)(f->esp)+1));
+      f->eax = open (get_user ((int *)(f->esp)+1));
       break;
     case SYS_FILESIZE:
-      f->eax = filesize(*((int *)(f->esp)+1));
+      f->eax = filesize (get_user ((int *)(f->esp)+1));
       break;
     case SYS_READ:
-      f->eax = read(*((int *)(f->esp)+1),
-                    *((int *)(f->esp)+2),
-                    *((int *)(f->esp)+3));
+      f->eax = read (get_user ((int *)(f->esp)+1),
+                     get_user ((int *)(f->esp)+2),
+                     get_user ((int *)(f->esp)+3));
       break;
     case SYS_WRITE:
-      f->eax = write(*((int *)(f->esp)+1),
-               *((int *)(f->esp)+2),
-               *((int *)(f->esp)+3));
+      f->eax = write (get_user ((int *)(f->esp)+1),
+                       get_user ((int *)(f->esp)+2),
+                       get_user ((int *)(f->esp)+3));
       break;
     case SYS_SEEK:
-      seek(*((int *)(f->esp)+1),
-           *((int *)(f->esp)+2));
+      seek (get_user ((int *)(f->esp)+1),
+            get_user ((int *)(f->esp)+2));
       break;
     case SYS_TELL:
-      f->eax = tell(*((int *)(f->esp)+1));
+      f->eax = tell (get_user ((int *)(f->esp)+1));
       break;
     case SYS_CLOSE:
-      close(*((int *)(f->esp)+1));
+      close (get_user ((int *)(f->esp)+1));
       break;
   }
 }
