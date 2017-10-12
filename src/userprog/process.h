@@ -19,8 +19,7 @@ struct process_sema
   int exit_status;
   int load_success; //0 means not load yet or success, -1 : fail
   struct semaphore sema;
-  struct list_elem elem;
-
+  struct list_elem elem; 
   struct list file_desc_list;
 };
 
