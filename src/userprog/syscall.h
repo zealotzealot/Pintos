@@ -12,6 +12,7 @@ typedef int pid_t;
 
 struct file_desc {
   struct file *file;
+  char name[32];
   int fd;
   struct list_elem elem;
 };
