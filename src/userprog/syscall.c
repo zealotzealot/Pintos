@@ -168,6 +168,9 @@ int wait (pid_t pid) {
 
 
 bool create (const char *file, unsigned initial_size) {
+  if (file == NULL)
+    exit(-1);
+
   return filesys_create(file, initial_size);
 }
 
@@ -180,6 +183,9 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
+  if (file == NULL)
+    exit(-1);
+
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = filesys_open(file);
   target->fd = file_desc_idx;
