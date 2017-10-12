@@ -10,13 +10,6 @@
 
 
 
-struct file_desc {
-  void *file;
-  bool closed;
-};
-
-
-
 struct file_desc * get_file_desc(int);
 static void syscall_handler (struct intr_frame *);
 void halt(void);
@@ -33,7 +26,6 @@ unsigned tell(int);
 void close(int);
 
 
-struct file_desc file_desc_list[100];
 int file_desc_idx=2;
 
 
@@ -69,12 +61,21 @@ struct file_desc * get_file_desc(int fd) {
   if (fd<2 || fd>=file_desc_idx)
     exit(-1);
 
-  struct file_desc *result = &file_desc_list[fd];
+  struct process_sema *process = pid_to_process_sema(thread_current()->tid);
+  struct list *target_list = &(process->file_desc_list);
+  struct list_elem *e;
+  struct file_desc *target;
 
-  if (result->closed)
-    exit(-1);
+  for (e = list_begin(target_list);
+       e != list_end(target_list);
+       e = list_next(e)) {
+    target = list_entry(e, struct file_desc, elem);
+    if (target->fd = fd) {
+      return target;
+    }
+  }
 
-  return result;
+  // Matching fd not found
 }
 
 
@@ -179,11 +180,14 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
-  if (file_desc_idx >= 100) {
-    exit(-1);
-  }
+  struct file_desc *target = malloc(sizeof(struct file_desc));
+  target->file = filesys_open(file);
+  target->fd = file_desc_idx;
 
-  file_desc_list[file_desc_idx].file = filesys_open(file);
+  struct process_sema *process = pid_to_process_sema(thread_current()->tid);
+  list_push_back(&(process->file_desc_list),
+                 &(target->elem));
+
   return file_desc_idx++;
 }
 
@@ -246,5 +250,6 @@ void close (int fd) {
   struct file_desc *target = get_file_desc(fd);
 
   file_close(target->file);
-  target->closed = true;
+  list_remove(&(target->elem));
+  free(target);
 }
