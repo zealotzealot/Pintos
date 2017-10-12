@@ -168,6 +168,9 @@ int wait (pid_t pid) {
 
 
 bool create (const char *file, unsigned initial_size) {
+  if (file == NULL)
+    exit(-1);
+
   return filesys_create(file, initial_size);
 }
 
@@ -180,8 +183,15 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
+  if (file == NULL)
+    exit(-1);
+
+  struct file *res_file = filesys_open(file);
+  if (res_file == NULL)
+    return -1;
+
   struct file_desc *target = malloc(sizeof(struct file_desc));
-  target->file = filesys_open(file);
+  target->file = res_file;
   target->fd = file_desc_idx;
 
   struct process_sema *process = pid_to_process_sema(thread_current()->tid);
