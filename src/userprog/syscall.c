@@ -179,6 +179,10 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
+  if (file_desc_idx >= 100) {
+    exit(-1);
+  }
+
   file_desc_list[file_desc_idx].file = filesys_open(file);
   return file_desc_idx++;
 }
