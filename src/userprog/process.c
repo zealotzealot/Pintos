@@ -31,28 +31,21 @@ int init_check = 0;
 static struct list process_sema_list;
 
 void kill_children (int parent_pid){ //free process' children who is dead
-  struct process_sema **children_list;
-  children_list = (struct process_sema **)malloc
-          (sizeof(struct process_sema *)*list_size(&process_sema_list));
-
-  int cnt = 0;
-  struct list_elem *e;
-  for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
-    struct process_sema *process_sema = list_entry(e, struct process_sema, elem);
-    
+  struct list_elem *e, *next;
+  struct process_sema *process_sema;
+  for(e=list_begin(&process_sema_list);
+      e!=list_end(&process_sema_list);
+      e=next){
+    next = list_next(e);
+    process_sema = list_entry(e, struct process_sema, elem);
+    if (process_sema->parent_pid - parent_pid < 5
+     && parent_pid - process_sema->parent_pid < 5)
     if(process_sema->parent_pid == parent_pid
         && process_sema->alive == 0){
-      children_list [cnt++] = process_sema;
+      list_remove(&(process_sema->elem));
+      free(process_sema);
     }
   }
-
-  int i;
-  for(i=0; i<cnt; i++){
-    list_remove (&(children_list[i]->elem));
-    free (children_list[i]);
-  }
-
-  free(children_list);
 }
 
 void process_sema_init (struct process_sema *process_sema){
@@ -65,7 +58,8 @@ void process_sema_init (struct process_sema *process_sema){
 }
 
 void set_exit_status (int status){
-  ASSERT (check_pid_to_process_sema (thread_current()->tid));
+  if (!check_pid_to_process_sema (thread_current()->tid))
+    return;
   struct process_sema *process_sema
           = pid_to_process_sema (thread_current()->tid);
   
@@ -123,7 +117,9 @@ void argument_pass(char *string, void **esp){
     *esp -= strlen(argv[i])+1;
     memcpy( *esp, argv[i], strlen(argv[i])+1 );
     argv_addr[i] = *esp;
+    free(argv[i]);
   }
+  free(argv);
 
   *esp = (int)*esp & 0xfffffffc; //word-align
   
