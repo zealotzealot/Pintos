@@ -312,6 +312,18 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  struct process_sema *process = pid_to_process_sema(curr->tid);
+  struct list *file_desc_list = &(process->file_desc_list);
+  struct list_elem *e, *next;
+  struct file_desc *target;
+  for (e=list_begin(file_desc_list);
+       e!=list_end(file_desc_list);
+       e = next) {
+    next = list_next(e);
+    target = list_entry(e, struct file_desc, elem);
+    close(target->fd);
+  }
 }
 
 /* Sets up the CPU for running user code in the current
