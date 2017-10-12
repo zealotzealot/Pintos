@@ -30,6 +30,31 @@ void set_exit_status (int);
 int init_check = 0;
 static struct list process_sema_list;
 
+void kill_children (int parent_pid){ //free process' children who is dead
+  struct process_sema **children_list;
+  children_list = (struct process_sema **)malloc
+          (sizeof(struct process_sema *)*list_size(&process_sema_list));
+
+  int cnt = 0;
+  struct list_elem *e;
+  for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
+    struct process_sema *process_sema = list_entry(e, struct process_sema, elem);
+    
+    if(process_sema->parent_pid == parent_pid
+        && process_sema->alive == 0){
+      children_list [cnt++] = process_sema;
+    }
+  }
+
+  int i;
+  for(i=0; i<cnt; i++){
+    list_remove (&(children_list[i]->elem));
+    free (children_list[i]);
+  }
+
+  free(children_list);
+}
+
 void process_sema_init (struct process_sema *process_sema){
   sema_init (&process_sema->sema, 0);
   process_sema->alive = 1;
@@ -290,6 +315,7 @@ process_exit (void)
             = pid_to_process_sema (thread_current()->tid);
 
     sema_up_all (&process_sema->sema);
+    kill_children(thread_current()->tid); //free children's memory
     process_sema->alive = 0;
   }
 
