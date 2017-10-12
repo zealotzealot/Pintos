@@ -180,13 +180,8 @@ bool remove (const char *file) {
 
 
 int open (const char *file) {
-  if (file_desc_idx >= 100) {
-    exit(-1);
-  }
-
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = filesys_open(file);
-  target->closed = false;
   target->fd = file_desc_idx;
 
   struct process_sema *process = pid_to_process_sema(thread_current()->tid);

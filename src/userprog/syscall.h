@@ -12,7 +12,6 @@ typedef int pid_t;
 
 struct file_desc {
   struct file *file;
-  bool closed;
   int fd;
   struct list_elem elem;
 };
