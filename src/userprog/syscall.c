@@ -193,6 +193,7 @@ int open (const char *file) {
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = res_file;
   target->fd = file_desc_idx;
+  strlcpy(target->name, file, strlen(file)+1);
 
   struct process_sema *process = pid_to_process_sema(thread_current()->tid);
   list_push_back(&(process->file_desc_list),
@@ -231,6 +232,9 @@ int write (int fd, const void *buffer, unsigned size) {
   }
 
   struct file_desc *target = get_file_desc(fd);
+
+  if (strcmp(target->name, thread_current()->name) == 0)
+    return 0;
 
   return file_write(target->file, buffer, size);
 }
