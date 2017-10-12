@@ -185,6 +185,8 @@ bool remove (const char *file) {
 int open (const char *file) {
   if (file == NULL)
     exit(-1);
+  if (strlen(file) == 0)
+    return -1;
 
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = filesys_open(file);
