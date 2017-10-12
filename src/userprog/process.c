@@ -20,17 +20,6 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 
-struct process_sema
-{
-  int pid;
-  int alive; //0 means process die, 1 means not
-  int parent_pid;
-  int exit_status;
-  int load_success; //0 means not load yet or success, -1 : fail
-  struct semaphore sema;
-  struct list_elem elem;
-};
-
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 void process_sema_init (struct process_sema *);
@@ -47,6 +36,7 @@ void process_sema_init (struct process_sema *process_sema){
   process_sema->exit_status = -1;
   process_sema->parent_pid = -1;
   process_sema->load_success = 0;
+  list_init(&process_sema->file_desc_list);
 }
 
 void set_exit_status (int status){
