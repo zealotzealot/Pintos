@@ -71,10 +71,7 @@ struct file_desc * get_file_desc(int fd) {
        e = list_next(e)) {
     target = list_entry(e, struct file_desc, elem);
     if (target->fd = fd) {
-      if (target->closed)
-        exit(-1);
-      else
-        return target;
+      return target;
     }
   }
 
@@ -258,5 +255,6 @@ void close (int fd) {
   struct file_desc *target = get_file_desc(fd);
 
   file_close(target->file);
-  target->closed = true;
+  list_remove(&(target->elem));
+  free(target);
 }
