@@ -208,7 +208,7 @@ static void
 start_process (void *f_name)
 {
   //printf("start process!! %s\n",thread_current()->name);
-  char *save_ptr, *file_name = malloc(sizeof(char) * strlen(f_name));
+  char *save_ptr, *file_name = malloc(sizeof(char) * (strlen(f_name)+1));
   strlcpy(file_name, f_name, strlen(f_name)+1);
   file_name = strtok_r (file_name, " ", &save_ptr);
 
