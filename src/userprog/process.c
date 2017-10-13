@@ -106,7 +106,7 @@ void argument_pass(char *string, void **esp){
     if(argc == 1) { argv = (char **) malloc(sizeof(char *) * argc); }
     else { argv = (char **) realloc(argv, sizeof(char *) * argc); }
     
-    argv[ argc - 1 ] = (char *) malloc(sizeof(char) * strlen(token));
+    argv[ argc - 1 ] = (char *) malloc(sizeof(char) * (strlen(token)+1));
     strlcpy( argv[argc -1], token, strlen(token)+1 );
 
   }
@@ -173,10 +173,10 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR){
-    palloc_free_page (fn_copy);
-    palloc_free_page (real_file_name);
-  }
+  palloc_free_page (fn_copy);
+  palloc_free_page (real_file_name);
+
+  if(tid == TID_ERROR) { exit(-1); }
 
   struct process_sema *process_sema;
   if (!check_pid_to_process_sema(tid)){ //부모가 자식보다 먼저 schedule되는 case
