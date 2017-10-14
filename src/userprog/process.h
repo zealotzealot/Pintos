@@ -16,6 +16,7 @@ struct process_sema
   int pid;
   int alive; //0 means process die, 1 means not
   int parent_pid;
+  int parent_alive; //0 means parent die, 1 means not
   int exit_status;
   int load_success; //0 means not load yet or success, -1 : fail
   struct semaphore sema;
