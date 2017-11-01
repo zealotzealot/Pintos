@@ -27,6 +27,7 @@ void close(int);
 
 
 int file_desc_idx=2;
+struct lock fork_lock;
 
 
 
@@ -107,6 +108,7 @@ struct file_desc * get_file_desc(int fd) {
 void
 syscall_init (void) 
 {
+  lock_init(&fork_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -174,13 +176,18 @@ void halt (void) {
 
 
 void exit (int status) {
+  if (!lock_held_by_current_thread(&fork_lock))
+    lock_acquire(&fork_lock);
   printf("%s: exit(%d)\n", thread_current()->name, status);
   set_exit_status (status);
+  lock_release(&fork_lock);
   thread_exit();
 }
 
 pid_t exec (const char *cmd_line) {
+  lock_acquire(&fork_lock);
   int pid = process_execute (cmd_line);
+  lock_release(&fork_lock);
   return pid;
 }
 
