@@ -19,6 +19,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
+#ifdef VM
+#include "vm/frame.h"
+#endif
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -33,9 +36,7 @@ static struct list process_sema_list;
 void kill_children (int parent_pid){ //free process' children who is dead
   struct list_elem *e, *next;
   struct process_sema *process_sema;
-  for(e=list_begin(&process_sema_list);
-      e!=list_end(&process_sema_list);
-      e=next){
+  for(e=list_begin(&process_sema_list);e!=list_end(&process_sema_list);e=next){
     next = list_next(e);
     process_sema = list_entry(e, struct process_sema, elem);
     if(process_sema->parent_pid == parent_pid){
@@ -174,8 +175,6 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
-  free(fn_copy);
-  free(real_file_name);
 
   if(tid == TID_ERROR) { exit(-1); }
 
@@ -313,17 +312,34 @@ void
 process_exit (void)
 {
   //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
+  struct thread *curr = thread_current ();
 
   if(init_check == 1){
-    struct process_sema *process_sema
-            = pid_to_process_sema (thread_current()->tid);
+    if(check_pid_to_process_sema (curr->tid)){
+      struct process_sema *process_sema
+              = pid_to_process_sema (curr->tid);
 
-    sema_up_all (&process_sema->sema);
-    kill_children(thread_current()->tid); //free children's memory
-    process_sema->alive = 0;
+      sema_up_all (&process_sema->sema);
+      kill_children(curr->tid); //free children's memory
+      process_sema->alive = 0;
+
+      struct list *file_desc_list = &(process_sema->file_desc_list);
+      struct list_elem *e, *next;
+      struct file_desc *target;
+      for (e=list_begin(file_desc_list); e!=list_end(file_desc_list); e = next) {
+          next = list_next(e);
+         target = list_entry(e, struct file_desc, elem);
+        close(target->fd);
+      }
+
+      //if 부모가 죽음, child 혼자서 다 free해야함
+      if(process_sema->parent_alive == 0){
+        list_remove(&(process_sema->elem));
+        free(process_sema);
+      }
+    }
   }
 
-  struct thread *curr = thread_current ();
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -342,24 +358,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-
-  struct process_sema *process = pid_to_process_sema(curr->tid);
-  struct list *file_desc_list = &(process->file_desc_list);
-  struct list_elem *e, *next;
-  struct file_desc *target;
-  for (e=list_begin(file_desc_list);
-       e!=list_end(file_desc_list);
-       e = next) {
-    next = list_next(e);
-    target = list_entry(e, struct file_desc, elem);
-    close(target->fd);
-  }
-
-  //if 부모가 죽음, child 혼자서 다 free해야함
-  if(process->parent_alive == 0){
-    list_remove(&(process->elem));
-    free(process);
-  }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -644,8 +642,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
+#ifdef VM
+      if (kpage == NULL){
+          evict_frame();
+      }
+      push_frame_table (upage, kpage, writable);
+#else
+      if(kpage == NULL){
         return false;
+      }
+#endif
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
@@ -675,18 +681,32 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
+  uint8_t *kpage,*upage;
   bool success = false;
 
+  upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else
-        palloc_free_page (kpage);
-    }
+#ifdef VM
+  if(kpage == NULL){
+    evict_frame();
+  }
+  push_frame_table (upage, kpage, true);
+
+  success = install_page (upage, kpage, true);
+  if (success)
+      *esp = PHYS_BASE;
+  else
+      palloc_free_page (kpage);
+#else
+  if(kpage != NULL){
+    success = install_page (upage, kpage, true);
+    if (success)
+      *esp = PHYS_BASE;
+    else
+      palloc_free_page (kpage); 
+  }
+#endif
+
   return success;
 }
 
