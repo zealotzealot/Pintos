@@ -4,6 +4,7 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "userprog/syscall.h"
+#include "lib/kernel/hash.h"
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
@@ -22,6 +23,10 @@ struct process_sema
   struct semaphore sema;
   struct list_elem elem; 
   struct list file_desc_list;
+
+#ifdef VM
+  struct hash page_hash;
+#endif
 };
 
 #endif /* userprog/process.h */

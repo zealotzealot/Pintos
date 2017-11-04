@@ -21,6 +21,7 @@
 #include "threads/synch.h"
 #ifdef VM
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 
 static thread_func start_process NO_RETURN;
@@ -59,6 +60,9 @@ void process_sema_init (struct process_sema *process_sema){
   process_sema->parent_alive = 1;
   process_sema->load_success = 0;
   list_init(&process_sema->file_desc_list);
+#ifdef VM
+  page_init(process_sema);
+#endif
 }
 
 void set_exit_status (int status){
