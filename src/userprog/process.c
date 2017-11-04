@@ -28,7 +28,6 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 void process_sema_init (struct process_sema *);
 bool check_pid_to_process_sema (int);
-struct process_sema* pid_to_process_sema (int);
 void set_exit_status (int);
 
 int init_check = 0;
@@ -569,8 +568,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
-
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
 static bool
@@ -647,15 +644,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
 #ifdef VM
-      uint8_t *kpage = push_frame_table (upage, writable, PAL_USER);
+      page_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable);
 #else
+      /* Get a page of memory. */
       uint8_t *kpage = palloc_get_page (PAL_USER);
       if(kpage == NULL){
         return false;
       }
-#endif
 
       /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
@@ -671,11 +667,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           palloc_free_page (kpage);
           return false; 
         }
+#endif
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+#ifdef VM
+      ofs += PGSIZE;
+#endif
     }
   return true;
 }
@@ -720,7 +720,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
