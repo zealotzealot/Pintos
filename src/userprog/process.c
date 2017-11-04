@@ -648,13 +648,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
 #ifdef VM
-      if (kpage == NULL){
-          evict_frame();
-      }
-      push_frame_table (upage, kpage, writable);
+      uint8_t *kpage = push_frame_table (upage, writable, PAL_USER);
 #else
+      uint8_t *kpage = palloc_get_page (PAL_USER);
       if(kpage == NULL){
         return false;
       }
@@ -692,12 +689,8 @@ setup_stack (void **esp)
   bool success = false;
 
   upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
 #ifdef VM
-  if(kpage == NULL){
-    evict_frame();
-  }
-  push_frame_table (upage, kpage, true);
+  kpage = push_frame_table (upage, true, PAL_USER | PAL_ZERO);
 
   success = install_page (upage, kpage, true);
   if (success)
@@ -705,6 +698,7 @@ setup_stack (void **esp)
   else
       palloc_free_page (kpage);
 #else
+  kpage = palloc_get_page (PAL_UESR | PAL_ZERO);
   if(kpage != NULL){
     success = install_page (upage, kpage, true);
     if (success)
