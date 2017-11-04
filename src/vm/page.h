@@ -9,6 +9,7 @@ struct page {
   struct hash_elem elem_hash;
 };
 
-void page_init (struct process_sema *);
+void page_init(struct hash *);
+void page_destroy(struct hash *);
 
 #endif

@@ -61,7 +61,7 @@ void process_sema_init (struct process_sema *process_sema){
   process_sema->load_success = 0;
   list_init(&process_sema->file_desc_list);
 #ifdef VM
-  page_init(process_sema);
+  page_init(&process_sema->page_hash);
 #endif
 }
 
@@ -326,6 +326,9 @@ process_exit (void)
       sema_up_all (&process_sema->sema);
       kill_children(curr->tid); //free children's memory
       process_sema->alive = 0;
+    #ifdef VM
+      page_destroy(&process_sema->page_hash);
+    #endif
 
       struct list *file_desc_list = &(process_sema->file_desc_list);
       struct list_elem *e, *next;

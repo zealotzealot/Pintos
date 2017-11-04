@@ -22,6 +22,10 @@ page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux 
        < hash_entry(b, struct page, elem_hash)->some_value;
 }
 
-void page_init(struct process_sema *p) {
-  hash_init(&(p->page_hash), page_hash_func, page_less_func, NULL);
+void page_init(struct hash *h) {
+  hash_init(h, page_hash_func, page_less_func, NULL);
+}
+
+void page_destroy(struct hash *h) {
+  hash_destroy(h, NULL);
 }
