@@ -44,8 +44,13 @@ bool evict_frame (){
   return true;
 }
 
-bool push_frame_table (void *upage, void *kpage, bool writable){
+uint8_t *push_frame_table (void *upage, bool writable, enum palloc_flags flags){
+  uint8_t *kpage = palloc_get_page(flags);
   
+  if (kpage == NULL) {
+    evict_frame();
+  }
+
   struct frame_table_entry *fte;
   fte = (struct frame_table_entry *) malloc (sizeof(struct frame_table_entry));
   fte->vaddr = (void *) ((uintptr_t) upage & ~PGMASK);
@@ -57,5 +62,5 @@ bool push_frame_table (void *upage, void *kpage, bool writable){
   hash_insert (&frame_table, &fte->elem_hash);
   lock_release (&lock_frame);
 
-  return true;
+  return kpage;
 }

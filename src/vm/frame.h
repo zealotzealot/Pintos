@@ -2,6 +2,7 @@
 #define VM_H
 
 #include "lib/kernel/hash.h"
+#include "threads/palloc.h"
 
 struct frame_table_entry {
   void *vaddr;
@@ -13,6 +14,6 @@ struct frame_table_entry {
 
 void frame_init (void);
 bool evict_frame (void);
-bool push_frame_table (void *, void *, bool);
+uint8_t *push_frame_table (void *, bool, enum palloc_flags);
 
 #endif

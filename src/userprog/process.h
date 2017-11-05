@@ -4,12 +4,15 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "userprog/syscall.h"
+#include "lib/kernel/hash.h"
 
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 void set_exit_status (int);
+struct process_sema *pid_to_process_sema(int);
+bool install_page (void *upage, void *kpage, bool writable);
 
 struct process_sema
 {
@@ -22,6 +25,10 @@ struct process_sema
   struct semaphore sema;
   struct list_elem elem; 
   struct list file_desc_list;
+
+#ifdef VM
+  struct hash page_hash;
+#endif
 };
 
 #endif /* userprog/process.h */
