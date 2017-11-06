@@ -30,7 +30,6 @@ void process_sema_init (struct process_sema *);
 bool check_pid_to_process_sema (int);
 void set_exit_status (int);
 
-int init_check = 0;
 static struct list process_sema_list;
 
 void kill_children (int parent_pid){ //free process' children who is dead
@@ -51,6 +50,10 @@ void kill_children (int parent_pid){ //free process' children who is dead
   }
 }
 
+void process_sema_list_init() {
+  list_init(&process_sema_list);
+}
+
 void process_sema_init (struct process_sema *process_sema){
   sema_init (&process_sema->sema, 0);
   process_sema->alive = 1;
@@ -68,7 +71,7 @@ void set_exit_status (int status){
   if (!check_pid_to_process_sema (thread_current()->tid))
     return;
   struct process_sema *process_sema
-          = pid_to_process_sema (thread_current()->tid);
+          = current_process_sema();
   
   process_sema->exit_status = status;
 }
@@ -89,15 +92,16 @@ struct process_sema*
 pid_to_process_sema (int pid){
   struct list_elem *e;
   
-  //printf("pid_to_process_sema, %s(%d) %d\n",thread_current()->name,thread_current()->tid,pid);
   for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
     if(list_entry(e, struct process_sema, elem)->pid == pid){
-      //printf("find!! %d %d\n",pid, list_entry(e, struct process_sema, elem)->pid);
       return list_entry(e, struct process_sema, elem);
     }
   }
-  //printf("not found!!\n");
-  return -1;
+  return NULL;
+}
+
+struct process_sema *current_process_sema() {
+  return pid_to_process_sema(thread_current()->tid);
 }
 
 void argument_pass(char *string, void **esp){
@@ -156,7 +160,6 @@ void argument_pass(char *string, void **esp){
 tid_t
 process_execute (const char *file_name) 
 {
-  //printf("process_execute!! %s(%d)->%s\n",thread_current()->name,thread_current()->tid,file_name);
   char *fn_copy, *real_file_name;
   tid_t tid;
 
@@ -170,12 +173,6 @@ process_execute (const char *file_name)
   char *save_ptr;
   real_file_name = strtok_r (real_file_name, " ", &save_ptr);
   
-  if (init_check != 1){
-    init_check = 1;
-    list_init (&process_sema_list);
-    //printf("process_sema list init! %s\n",thread_current()->name);
-  }
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
 
@@ -189,7 +186,6 @@ process_execute (const char *file_name)
     process_sema->pid = tid;
     process_sema->parent_pid = thread_current()->tid;
     list_push_back (&process_sema_list, &process_sema->elem);
-    //printf("push %s %d\n",file_name,tid);
   }
   else{//자식이 부모보다 먼저
     process_sema = pid_to_process_sema(tid);
@@ -202,7 +198,6 @@ process_execute (const char *file_name)
   }
   sema_down(&process_sema->sema);
   
-  //printf("%s->%s tid : %d\n\n",thread_current()->name,file_name,tid);
   if(process_sema->load_success == -1){
     return -1;
   }
@@ -214,7 +209,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *f_name)
 {
-  //printf("start process!! %s\n",thread_current()->name);
   char *save_ptr, *file_name = malloc(sizeof(char) * (strlen(f_name)+1));
   strlcpy(file_name, f_name, strlen(f_name)+1);
   file_name = strtok_r (file_name, " ", &save_ptr);
@@ -230,7 +224,6 @@ start_process (void *f_name)
   
     process_sema->pid = pid;
     list_push_back (&process_sema_list, &process_sema->elem);
-    //printf("push %s %d\n",file_name,pid);
   }
   else{
     process_sema = pid_to_process_sema (thread_current()->tid);
@@ -281,33 +274,26 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  //printf("process_wait!! %s %d\n",thread_current()->name,child_tid);
-  if(init_check == 1){
-    
-    if  (!check_pid_to_process_sema (child_tid)){
-      //printf("check out!\n");
-      return -1;
-    }
-
-    struct process_sema *process_sema;
-    process_sema = pid_to_process_sema (child_tid);
-
-    if(process_sema->parent_pid != thread_current()->tid){
-      //printf("parent out! %d %d\n",process_sema->parent_pid, thread_current()->tid);
-      return -1;
-    }
-    
-    if(process_sema->alive){
-      sema_down (&process_sema->sema);
-    }
-
-    int exit_status = process_sema->exit_status;
-    list_remove(&(process_sema->elem));
-    free(process_sema);
-    
-    return exit_status;
+  if  (!check_pid_to_process_sema (child_tid)){
+    return -1;
   }
-  return -1;
+
+  struct process_sema *process_sema;
+  process_sema = pid_to_process_sema (child_tid);
+
+  if(process_sema->parent_pid != thread_current()->tid){
+    return -1;
+  }
+    
+  if(process_sema->alive){
+    sema_down (&process_sema->sema);
+  }
+
+  int exit_status = process_sema->exit_status;
+  list_remove(&(process_sema->elem));
+  free(process_sema);
+    
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -316,37 +302,34 @@ process_exit (void)
 {
   enum intr_level old_level = intr_disable();
 
-  //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
   struct thread *curr = thread_current ();
   struct file *executable_file;
 
-  if(init_check == 1){
-    if(check_pid_to_process_sema (curr->tid)){
-      struct process_sema *process_sema
-              = pid_to_process_sema (curr->tid);
+  if(check_pid_to_process_sema (curr->tid)){
+    struct process_sema *process_sema
+            = pid_to_process_sema (curr->tid);
 
-      sema_up_all (&process_sema->sema);
-      kill_children(curr->tid); //free children's memory
-      process_sema->alive = 0;
-      executable_file = process_sema->executable_file;
-    #ifdef VM
-      page_destroy(&process_sema->page_hash);
-    #endif
+    sema_up_all (&process_sema->sema);
+    kill_children(curr->tid); //free children's memory
+    process_sema->alive = 0;
+    executable_file = process_sema->executable_file;
+#ifdef VM
+    page_destroy(&process_sema->page_hash);
+#endif
 
-      struct list *file_desc_list = &(process_sema->file_desc_list);
-      struct list_elem *e, *next;
-      struct file_desc *target;
-      for (e=list_begin(file_desc_list); e!=list_end(file_desc_list); e = next) {
-          next = list_next(e);
-         target = list_entry(e, struct file_desc, elem);
-        close(target->fd);
-      }
+    struct list *file_desc_list = &(process_sema->file_desc_list);
+    struct list_elem *e, *next;
+    struct file_desc *target;
+    for (e=list_begin(file_desc_list); e!=list_end(file_desc_list); e = next) {
+      next = list_next(e);
+      target = list_entry(e, struct file_desc, elem);
+      close(target->fd);
+    }
 
-      //if 부모가 죽음, child 혼자서 다 free해야함
-      if(process_sema->parent_alive == 0){
-        list_remove(&(process_sema->elem));
-        free(process_sema);
-      }
+    //if 부모가 죽음, child 혼자서 다 free해야함
+    if(process_sema->parent_alive == 0){
+      list_remove(&(process_sema->elem));
+      free(process_sema);
     }
   }
 
@@ -482,7 +465,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
-  pid_to_process_sema(t->tid)->executable_file = file;
+  current_process_sema()->executable_file = file;
   if (file != NULL)
     file_deny_write(file);
   if (file == NULL) 

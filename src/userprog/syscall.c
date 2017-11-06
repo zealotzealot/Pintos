@@ -87,7 +87,7 @@ struct file_desc * get_file_desc(int fd) {
   if (fd<2 || fd>=file_desc_idx)
     exit(-1);
 
-  struct process_sema *process = pid_to_process_sema(thread_current()->tid);
+  struct process_sema *process = current_process_sema();
   struct list *target_list = &(process->file_desc_list);
   struct list_elem *e;
   struct file_desc *target;
@@ -227,7 +227,7 @@ int open (const char *file) {
   target->fd = file_desc_idx;
   strlcpy(target->name, file, strlen(file)+1);
 
-  struct process_sema *process = pid_to_process_sema(thread_current()->tid);
+  struct process_sema *process = current_process_sema();
   list_push_back(&(process->file_desc_list),
                  &(target->elem));
 

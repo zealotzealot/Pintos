@@ -6,6 +6,8 @@
 #include "userprog/syscall.h"
 #include "lib/kernel/hash.h"
 
+void process_sema_list_init();
+struct process_sema *current_process_sema();
 tid_t process_execute (const char *file_name);
 int process_wait (tid_t);
 void process_exit (void);
