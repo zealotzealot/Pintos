@@ -265,9 +265,6 @@ int write (int fd, const void *buffer, unsigned size) {
 
   struct file_desc *target = get_file_desc(fd);
 
-  if (strcmp(target->name, thread_current()->name) == 0)
-    return 0;
-
   return file_write(target->file, buffer, size);
 }
 
