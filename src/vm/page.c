@@ -15,7 +15,7 @@ bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * 
 
 // Get page hash of current process
 struct hash *current_page_hash() {
-  return &pid_to_process_sema(thread_current()->tid)->page_hash;
+  return &current_process_sema()->page_hash;
 }
 
 struct page *get_page(void *addr) {

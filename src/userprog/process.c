@@ -71,7 +71,7 @@ void set_exit_status (int status){
   if (!check_pid_to_process_sema (thread_current()->tid))
     return;
   struct process_sema *process_sema
-          = pid_to_process_sema (thread_current()->tid);
+          = current_process_sema();
   
   process_sema->exit_status = status;
 }
@@ -97,7 +97,11 @@ pid_to_process_sema (int pid){
       return list_entry(e, struct process_sema, elem);
     }
   }
-  return -1;
+  return NULL;
+}
+
+struct process_sema *current_process_sema() {
+  return pid_to_process_sema(thread_current()->tid);
 }
 
 void argument_pass(char *string, void **esp){
@@ -461,7 +465,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
-  pid_to_process_sema(t->tid)->executable_file = file;
+  current_process_sema()->executable_file = file;
   if (file != NULL)
     file_deny_write(file);
   if (file == NULL) 
