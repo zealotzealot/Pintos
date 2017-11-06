@@ -479,6 +479,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Open executable file. */
   file = filesys_open (file_name);
   pid_to_process_sema(t->tid)->executable_file = file;
+  if (file != NULL)
+    file_deny_write(file);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -703,7 +705,7 @@ setup_stack (void **esp)
   else
       palloc_free_page (kpage);
 #else
-  kpage = palloc_get_page (PAL_UESR | PAL_ZERO);
+  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if(kpage != NULL){
     success = install_page (upage, kpage, true);
     if (success)
