@@ -28,6 +28,7 @@ void close(int);
 
 int file_desc_idx=2;
 struct lock fork_lock;
+struct lock file_lock;
 
 
 
@@ -109,6 +110,7 @@ void
 syscall_init (void) 
 {
   lock_init(&fork_lock);
+  lock_init(&file_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -203,13 +205,19 @@ bool create (const char *file, unsigned initial_size) {
   if (file == NULL)
     exit(-1);
 
-  return filesys_create(file, initial_size);
+  lock_acquire(&file_lock);
+  bool result = filesys_create(file, initial_size);
+  lock_release(&file_lock);
+  return result;
 }
 
 
 
 bool remove (const char *file) {
-  return filesys_remove(file);
+  lock_acquire(&file_lock);
+  bool result = filesys_remove(file);
+  lock_release(&file_lock);
+  return result;
 }
 
 
@@ -218,7 +226,9 @@ int open (const char *file) {
   if (file == NULL)
     exit(-1);
 
+  lock_acquire(&file_lock);
   struct file *res_file = filesys_open(file);
+  lock_release(&file_lock);
   if (res_file == NULL)
     return -1;
 
@@ -239,7 +249,10 @@ int open (const char *file) {
 int filesize (int fd) {
   struct file_desc *target = get_file_desc(fd);
 
-  return file_length(target->file);
+  lock_acquire(&file_lock);
+  int result = file_length(target->file);
+  lock_release(&file_lock);
+  return result;
 }
 
 
@@ -251,7 +264,10 @@ int read (int fd, void *buffer, unsigned size) {
 
   struct file_desc *target = get_file_desc(fd);
 
-  return file_read(target->file, buffer, size);
+  lock_acquire(&file_lock);
+  int result = file_read(target->file, buffer, size);
+  lock_release(&file_lock);
+  return result;
 }
 
 
@@ -265,7 +281,10 @@ int write (int fd, const void *buffer, unsigned size) {
 
   struct file_desc *target = get_file_desc(fd);
 
-  return file_write(target->file, buffer, size);
+  lock_acquire(&file_lock);
+  int result = file_write(target->file, buffer, size);
+  lock_release(&file_lock);
+  return result;
 }
 
 
@@ -273,7 +292,9 @@ int write (int fd, const void *buffer, unsigned size) {
 void seek (int fd, unsigned position) {
   struct file_desc *target = get_file_desc(fd);
 
+  lock_acquire(&file_lock);
   file_seek(target->file, position);
+  lock_release(&file_lock);
 }
 
 
@@ -281,7 +302,10 @@ void seek (int fd, unsigned position) {
 unsigned tell (int fd) {
   struct file_desc *target = get_file_desc(fd);
 
-  return file_tell(target->file);
+  lock_acquire(&file_lock);
+  unsigned result = file_tell(target->file);
+  lock_release(&file_lock);
+  return result;
 }
 
 
@@ -292,7 +316,9 @@ void close (int fd) {
 
   struct file_desc *target = get_file_desc(fd);
 
+  lock_acquire(&file_lock);
   file_close(target->file);
+  lock_release(&file_lock);
   list_remove(&(target->elem));
   free(target);
 }
