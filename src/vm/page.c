@@ -22,7 +22,11 @@ struct page *get_page(void *addr) {
   struct page dummy_page;
   dummy_page.upage = pg_round_down(addr);
 
-  return hash_entry(hash_find(current_page_hash(), &dummy_page.elem_hash),
+  struct hash_elem *hash_elem = hash_find(current_page_hash(), &dummy_page.elem_hash);
+  if (hash_elem == NULL)
+    return NULL;
+
+  return hash_entry(hash_elem,
                     struct page,
                     elem_hash);
 }
@@ -62,6 +66,8 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
 
 bool page_load_file(void * addr) {
   struct page *page = get_page(addr);
+  if (page == NULL)
+    return false;
 
   uint8_t *kpage = push_frame_table(page->upage, page->writable, PAL_USER);
 
