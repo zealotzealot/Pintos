@@ -314,6 +314,8 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+  enum intr_level old_level = intr_disable();
+
   //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
   struct thread *curr = thread_current ();
   struct file *executable_file;
@@ -369,6 +371,8 @@ process_exit (void)
 
   if (executable_file != NULL)
     file_close(executable_file);
+
+  intr_set_level(old_level);
 }
 
 /* Sets up the CPU for running user code in the current
