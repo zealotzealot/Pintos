@@ -30,7 +30,6 @@ void process_sema_init (struct process_sema *);
 bool check_pid_to_process_sema (int);
 void set_exit_status (int);
 
-int init_check = 0;
 static struct list process_sema_list;
 
 void kill_children (int parent_pid){ //free process' children who is dead
@@ -49,6 +48,10 @@ void kill_children (int parent_pid){ //free process' children who is dead
       }
     }
   }
+}
+
+void process_sema_list_init() {
+  list_init(&process_sema_list);
 }
 
 void process_sema_init (struct process_sema *process_sema){
@@ -166,11 +169,6 @@ process_execute (const char *file_name)
   char *save_ptr;
   real_file_name = strtok_r (real_file_name, " ", &save_ptr);
   
-  if (init_check != 1){
-    init_check = 1;
-    list_init (&process_sema_list);
-  }
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
 
@@ -272,30 +270,26 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  if(init_check == 1){
-    
-    if  (!check_pid_to_process_sema (child_tid)){
-      return -1;
-    }
-
-    struct process_sema *process_sema;
-    process_sema = pid_to_process_sema (child_tid);
-
-    if(process_sema->parent_pid != thread_current()->tid){
-      return -1;
-    }
-    
-    if(process_sema->alive){
-      sema_down (&process_sema->sema);
-    }
-
-    int exit_status = process_sema->exit_status;
-    list_remove(&(process_sema->elem));
-    free(process_sema);
-    
-    return exit_status;
+  if  (!check_pid_to_process_sema (child_tid)){
+    return -1;
   }
-  return -1;
+
+  struct process_sema *process_sema;
+  process_sema = pid_to_process_sema (child_tid);
+
+  if(process_sema->parent_pid != thread_current()->tid){
+    return -1;
+  }
+    
+  if(process_sema->alive){
+    sema_down (&process_sema->sema);
+  }
+
+  int exit_status = process_sema->exit_status;
+  list_remove(&(process_sema->elem));
+  free(process_sema);
+    
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -307,33 +301,31 @@ process_exit (void)
   struct thread *curr = thread_current ();
   struct file *executable_file;
 
-  if(init_check == 1){
-    if(check_pid_to_process_sema (curr->tid)){
-      struct process_sema *process_sema
-              = pid_to_process_sema (curr->tid);
+  if(check_pid_to_process_sema (curr->tid)){
+    struct process_sema *process_sema
+            = pid_to_process_sema (curr->tid);
 
-      sema_up_all (&process_sema->sema);
-      kill_children(curr->tid); //free children's memory
-      process_sema->alive = 0;
-      executable_file = process_sema->executable_file;
-    #ifdef VM
-      page_destroy(&process_sema->page_hash);
-    #endif
+    sema_up_all (&process_sema->sema);
+    kill_children(curr->tid); //free children's memory
+    process_sema->alive = 0;
+    executable_file = process_sema->executable_file;
+#ifdef VM
+    page_destroy(&process_sema->page_hash);
+#endif
 
-      struct list *file_desc_list = &(process_sema->file_desc_list);
-      struct list_elem *e, *next;
-      struct file_desc *target;
-      for (e=list_begin(file_desc_list); e!=list_end(file_desc_list); e = next) {
-          next = list_next(e);
-         target = list_entry(e, struct file_desc, elem);
-        close(target->fd);
-      }
+    struct list *file_desc_list = &(process_sema->file_desc_list);
+    struct list_elem *e, *next;
+    struct file_desc *target;
+    for (e=list_begin(file_desc_list); e!=list_end(file_desc_list); e = next) {
+      next = list_next(e);
+      target = list_entry(e, struct file_desc, elem);
+      close(target->fd);
+    }
 
-      //if 부모가 죽음, child 혼자서 다 free해야함
-      if(process_sema->parent_alive == 0){
-        list_remove(&(process_sema->elem));
-        free(process_sema);
-      }
+    //if 부모가 죽음, child 혼자서 다 free해야함
+    if(process_sema->parent_alive == 0){
+      list_remove(&(process_sema->elem));
+      free(process_sema);
     }
   }
 

@@ -105,6 +105,7 @@ main (void)
 #ifdef USERPROG
   exception_init ();
   syscall_init ();
+  process_sema_list_init();
 #endif
 
 #ifdef VM
