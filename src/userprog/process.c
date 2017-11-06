@@ -316,6 +316,7 @@ process_exit (void)
 {
   //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
   struct thread *curr = thread_current ();
+  struct file *executable_file;
 
   if(init_check == 1){
     if(check_pid_to_process_sema (curr->tid)){
@@ -325,6 +326,7 @@ process_exit (void)
       sema_up_all (&process_sema->sema);
       kill_children(curr->tid); //free children's memory
       process_sema->alive = 0;
+      executable_file = process_sema->executable_file;
     #ifdef VM
       page_destroy(&process_sema->page_hash);
     #endif
@@ -364,6 +366,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+
+  if (executable_file != NULL)
+    file_close(executable_file);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -473,6 +478,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
+  pid_to_process_sema(t->tid)->executable_file = file;
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -562,7 +568,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
   return success;
 }
 

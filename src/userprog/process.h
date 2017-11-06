@@ -25,6 +25,7 @@ struct process_sema
   struct semaphore sema;
   struct list_elem elem; 
   struct list file_desc_list;
+  struct file *executable_file;
 
 #ifdef VM
   struct hash page_hash;
