@@ -89,14 +89,11 @@ struct process_sema*
 pid_to_process_sema (int pid){
   struct list_elem *e;
   
-  //printf("pid_to_process_sema, %s(%d) %d\n",thread_current()->name,thread_current()->tid,pid);
   for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
     if(list_entry(e, struct process_sema, elem)->pid == pid){
-      //printf("find!! %d %d\n",pid, list_entry(e, struct process_sema, elem)->pid);
       return list_entry(e, struct process_sema, elem);
     }
   }
-  //printf("not found!!\n");
   return -1;
 }
 
@@ -156,7 +153,6 @@ void argument_pass(char *string, void **esp){
 tid_t
 process_execute (const char *file_name) 
 {
-  //printf("process_execute!! %s(%d)->%s\n",thread_current()->name,thread_current()->tid,file_name);
   char *fn_copy, *real_file_name;
   tid_t tid;
 
@@ -173,7 +169,6 @@ process_execute (const char *file_name)
   if (init_check != 1){
     init_check = 1;
     list_init (&process_sema_list);
-    //printf("process_sema list init! %s\n",thread_current()->name);
   }
 
   /* Create a new thread to execute FILE_NAME. */
@@ -189,7 +184,6 @@ process_execute (const char *file_name)
     process_sema->pid = tid;
     process_sema->parent_pid = thread_current()->tid;
     list_push_back (&process_sema_list, &process_sema->elem);
-    //printf("push %s %d\n",file_name,tid);
   }
   else{//자식이 부모보다 먼저
     process_sema = pid_to_process_sema(tid);
@@ -202,7 +196,6 @@ process_execute (const char *file_name)
   }
   sema_down(&process_sema->sema);
   
-  //printf("%s->%s tid : %d\n\n",thread_current()->name,file_name,tid);
   if(process_sema->load_success == -1){
     return -1;
   }
@@ -214,7 +207,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *f_name)
 {
-  //printf("start process!! %s\n",thread_current()->name);
   char *save_ptr, *file_name = malloc(sizeof(char) * (strlen(f_name)+1));
   strlcpy(file_name, f_name, strlen(f_name)+1);
   file_name = strtok_r (file_name, " ", &save_ptr);
@@ -230,7 +222,6 @@ start_process (void *f_name)
   
     process_sema->pid = pid;
     list_push_back (&process_sema_list, &process_sema->elem);
-    //printf("push %s %d\n",file_name,pid);
   }
   else{
     process_sema = pid_to_process_sema (thread_current()->tid);
@@ -281,11 +272,9 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  //printf("process_wait!! %s %d\n",thread_current()->name,child_tid);
   if(init_check == 1){
     
     if  (!check_pid_to_process_sema (child_tid)){
-      //printf("check out!\n");
       return -1;
     }
 
@@ -293,7 +282,6 @@ process_wait (tid_t child_tid UNUSED)
     process_sema = pid_to_process_sema (child_tid);
 
     if(process_sema->parent_pid != thread_current()->tid){
-      //printf("parent out! %d %d\n",process_sema->parent_pid, thread_current()->tid);
       return -1;
     }
     
@@ -316,7 +304,6 @@ process_exit (void)
 {
   enum intr_level old_level = intr_disable();
 
-  //printf("process_exit, %s %d!!\n",thread_current()->name,thread_current()->tid);
   struct thread *curr = thread_current ();
   struct file *executable_file;
 
