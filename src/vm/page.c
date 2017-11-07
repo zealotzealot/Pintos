@@ -69,20 +69,14 @@ bool page_load_file(void * addr) {
   if (page == NULL)
     return false;
 
-  uint8_t *kpage = push_frame_table(page->upage, page->writable, PAL_USER);
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
 
   /* Load this page. */
   if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-    palloc_free_page (kpage);
+    frame_free(kpage);
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
-
-  /* Add the page to the process's address space. */
-  if (!install_page (page->upage, kpage, page->writable)) {
-    palloc_free_page (kpage);
-    return false;
-  }
 
   return true;
 }
