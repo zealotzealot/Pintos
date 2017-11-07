@@ -58,6 +58,7 @@ void page_destroy(struct hash *h) {
 void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable) {
   struct page *page = malloc(sizeof(struct page));
 
+  page->type = PAGE_FILE;
   page->file = file;
   page->ofs = ofs;
   page->upage = upage;
@@ -73,7 +74,12 @@ bool page_load(void * addr) {
   if (page == NULL)
     return false;
 
-  return page_load_file(page);
+  switch (page->type) {
+    case PAGE_FILE:
+      return page_load_file(page);
+    default:
+      return false;
+  }
 }
 
 
