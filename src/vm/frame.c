@@ -44,11 +44,16 @@ bool evict_frame (){
   return true;
 }
 
-uint8_t *push_frame_table (void *upage, bool writable, enum palloc_flags flags){
+uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   uint8_t *kpage = palloc_get_page(flags);
   
   if (kpage == NULL) {
     evict_frame();
+  }
+
+  if (!install_page(upage, kpage, writable)) {
+    palloc_free_page(kpage);
+    return NULL;
   }
 
   struct frame_table_entry *fte;

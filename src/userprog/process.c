@@ -684,9 +684,9 @@ setup_stack (void **esp)
 
   upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
 #ifdef VM
-  kpage = push_frame_table (upage, true, PAL_USER | PAL_ZERO);
+  kpage = frame_allocate (upage, true, PAL_USER | PAL_ZERO);
 
-  success = install_page (upage, kpage, true);
+  success = (kpage != NULL);
   if (success)
       *esp = PHYS_BASE;
   else
