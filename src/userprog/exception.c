@@ -151,6 +151,11 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
 #ifdef VM
+  if (!not_present)
+    exit(-1);
+  if (!user)
+    exit(-1);
+
   bool sg_1 = (fault_addr > f->esp) && (fault_addr < PHYS_BASE);
   bool sg_2 = fault_addr == f->esp-4;
   bool sg_3 = fault_addr == f->esp-32;
