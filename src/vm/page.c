@@ -13,6 +13,11 @@ struct hash *get_current_hash();
 unsigned page_hash_func (const struct hash_elem *, void *);
 bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * UNUSED);
 
+bool page_load_file(struct page *);
+bool page_load_stack(struct page *);
+
+
+
 // Get page hash of current process
 struct hash *current_page_hash() {
   return &current_process_sema()->page_hash;
@@ -54,6 +59,7 @@ void page_destroy(struct hash *h) {
 void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable) {
   struct page *page = malloc(sizeof(struct page));
 
+  page->type = PAGE_FILE;
   page->file = file;
   page->ofs = ofs;
   page->upage = upage;
@@ -64,11 +70,38 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   hash_insert(current_page_hash(), &page->elem_hash);
 }
 
-bool page_load_file(void * addr) {
+
+
+void page_add_stack(void *addr) {
+  struct page *page = malloc(sizeof(struct page));
+
+  page->type = PAGE_STACK;
+  page->upage = pg_round_down(addr);
+  page->writable = true;
+
+  hash_insert(current_page_hash(), &page->elem_hash);
+}
+
+
+
+bool page_load(void * addr) {
   struct page *page = get_page(addr);
   if (page == NULL)
     return false;
 
+  switch (page->type) {
+    case PAGE_FILE:
+      return page_load_file(page);
+    case PAGE_STACK:
+      return page_load_stack(page);
+    default:
+      return false;
+  }
+}
+
+
+
+bool page_load_file(struct page *page) {
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
 
   /* Load this page. */
@@ -77,6 +110,16 @@ bool page_load_file(void * addr) {
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
+
+  return true;
+}
+
+
+
+bool page_load_stack(struct page *page) {
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+
+  memset (kpage, 0, PGSIZE);
 
   return true;
 }
