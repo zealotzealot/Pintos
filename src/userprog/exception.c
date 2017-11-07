@@ -5,6 +5,7 @@
 #include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -150,6 +151,12 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
 #ifdef VM
+  bool sg_1 = (fault_addr > f->esp) && (fault_addr < PHYS_BASE);
+  bool sg_2 = fault_addr == f->esp-4;
+  bool sg_3 = fault_addr == f->esp-32;
+  if (sg_1 || sg_2 || sg_3)
+    page_add_stack(fault_addr);
+
   if (page_load(fault_addr))
     return;
 #endif
