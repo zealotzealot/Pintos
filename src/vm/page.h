@@ -19,6 +19,6 @@ void page_init(struct hash *);
 void page_destroy(struct hash *);
 
 void page_add_file(struct file *, off_t, uint8_t *, size_t, size_t, bool);
-bool page_load_file(void *);
+bool page_load(void *);
 
 #endif

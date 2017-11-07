@@ -13,6 +13,10 @@ struct hash *get_current_hash();
 unsigned page_hash_func (const struct hash_elem *, void *);
 bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * UNUSED);
 
+bool page_load_file(struct page *);
+
+
+
 // Get page hash of current process
 struct hash *current_page_hash() {
   return &current_process_sema()->page_hash;
@@ -64,11 +68,17 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   hash_insert(current_page_hash(), &page->elem_hash);
 }
 
-bool page_load_file(void * addr) {
+bool page_load(void * addr) {
   struct page *page = get_page(addr);
   if (page == NULL)
     return false;
 
+  return page_load_file(page);
+}
+
+
+
+bool page_load_file(struct page *page) {
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
 
   /* Load this page. */

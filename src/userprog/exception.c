@@ -150,7 +150,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
 #ifdef VM
-  if (page_load_file(fault_addr))
+  if (page_load(fault_addr))
     return;
 #endif
 
