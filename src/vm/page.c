@@ -73,7 +73,7 @@ bool page_load_file(void * addr) {
 
   /* Load this page. */
   if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-    palloc_free_page (kpage);
+    frame_free(kpage);
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);

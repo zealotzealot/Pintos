@@ -12,6 +12,7 @@ struct hash frame_table;
 
 unsigned frame_hash_func (const struct hash_elem *, void *);
 bool frame_less_func (const struct hash_elem *, const struct hash_elem *, void * UNUSED);
+struct frame_table_entry *get_frame(void *);
 
 
 unsigned
@@ -27,6 +28,23 @@ frame_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux
   return hash_entry(a, struct frame_table_entry, elem_hash)->paddr
           < hash_entry(b, struct frame_table_entry, elem_hash)->paddr;
 }
+
+
+
+struct frame_table_entry *get_frame(void *kpage) {
+  struct frame_table_entry dummy_frame;
+  dummy_frame.paddr = kpage;
+
+  struct hash_elem *hash_elem = hash_find(&frame_table, &dummy_frame.elem_hash);
+  if (hash_elem == NULL)
+    return NULL;
+
+  return hash_entry(hash_elem,
+                    struct frame_table_entry,
+                    elem_hash);
+}
+
+
 
 void frame_init(){
   lock_init (&lock_frame);
@@ -68,4 +86,22 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   lock_release (&lock_frame);
 
   return kpage;
+}
+
+
+
+void frame_free (void *kpage){
+  if (kpage == NULL)
+    return;
+
+  palloc_free_page(kpage);
+
+  struct frame_table_entry *fte = get_frame(kpage);
+
+  lock_acquire (&lock_frame);
+  list_remove (&fte->elem_list);
+  hash_delete (&frame_table, &fte->elem_hash);
+  lock_release (&lock_frame);
+
+  // TODO: uninstall page in pagedir
 }

@@ -15,5 +15,6 @@ struct frame_table_entry {
 void frame_init (void);
 bool evict_frame (void);
 uint8_t *frame_allocate (void *, bool, enum palloc_flags);
+void frame_free (void *);
 
 #endif

@@ -690,7 +690,7 @@ setup_stack (void **esp)
   if (success)
       *esp = PHYS_BASE;
   else
-      palloc_free_page (kpage);
+      frame_free(kpage);
 #else
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if(kpage != NULL){
