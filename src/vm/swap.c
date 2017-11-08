@@ -47,7 +47,7 @@ void swap_out() {
     disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
   }
 
-  page_add_swap(fte_evicted->upage, slot_start, fte_evicted->writable);
+  page_add_swap(fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
  
   frame_free(kpage);
 }

@@ -85,7 +85,7 @@ void page_add_stack(void *addr) {
 
 
 
-void page_add_swap(void *upage, int slot, bool writable) {
+void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_SWAP;
@@ -93,7 +93,7 @@ void page_add_swap(void *upage, int slot, bool writable) {
   page->writable = writable;
   page->slot = slot;
 
-  hash_insert(current_page_hash(), &page->elem_hash);
+  hash_insert(&pid_to_process_sema(pid)->page_hash, &page->elem_hash);
 }
 
 

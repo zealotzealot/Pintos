@@ -83,7 +83,7 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte->upage = (void *) ((uintptr_t) upage & ~PGMASK);
   fte->kpage = (void *) ((uintptr_t) kpage & ~PGMASK);
   fte->writable = writable;
-  fte->pid = thread_current()->tid;
+  fte->thread = thread_current();
 
   lock_acquire (&lock_frame);
   list_push_back (&LRU_list, &fte->elem_list);
@@ -108,7 +108,7 @@ void frame_free (void *kpage){
   hash_delete (&frame_table, &fte->elem_hash);
   lock_release (&lock_frame);
 
-  pagedir_clear_page(thread_current()->pagedir, fte->upage);
+  pagedir_clear_page(fte->thread->pagedir, fte->upage);
 
   free(fte);
 }

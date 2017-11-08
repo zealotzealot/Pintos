@@ -8,7 +8,7 @@ struct frame_table_entry {
   void *upage;
   void *kpage;
   bool writable;
-  int pid;
+  struct thread *thread;
   struct list_elem elem_list;
   struct hash_elem elem_hash;
 };
