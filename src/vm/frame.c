@@ -5,6 +5,7 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "vm/swap.h"
 
 struct lock lock_frame;
 struct list LRU_list;
@@ -52,21 +53,24 @@ void frame_init(){
   hash_init (&frame_table, frame_hash_func, frame_less_func, NULL);
 }
 
-bool evict_frame (){
-  struct list_elem *fte_evicted = list_begin (&LRU_list);
-  
-  lock_acquire (&lock_frame);
-  list_remove (fte_evicted);
-  lock_release (&lock_frame);
+struct frame_table_entry *choose_frame_evict() {
+  struct list_elem *elem = list_begin(&LRU_list);
 
-  return true;
+  if (elem == NULL)
+    return NULL;
+
+  return list_entry(elem, struct frame_table_entry, elem_list);
 }
 
 uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   uint8_t *kpage = palloc_get_page(flags);
   
   if (kpage == NULL) {
-    evict_frame();
+    swap_out();
+    kpage = palloc_get_page(flags);
+    if (kpage == NULL) {
+      return NULL;
+    }
   }
 
   if (!install_page(upage, kpage, writable)) {
@@ -78,7 +82,8 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte = (struct frame_table_entry *) malloc (sizeof(struct frame_table_entry));
   fte->upage = (void *) ((uintptr_t) upage & ~PGMASK);
   fte->kpage = (void *) ((uintptr_t) kpage & ~PGMASK);
-  fte->pid = thread_current()->tid;
+  fte->writable = writable;
+  fte->thread = thread_current();
 
   lock_acquire (&lock_frame);
   list_push_back (&LRU_list, &fte->elem_list);
@@ -103,5 +108,7 @@ void frame_free (void *kpage){
   hash_delete (&frame_table, &fte->elem_hash);
   lock_release (&lock_frame);
 
-  // TODO: uninstall page in pagedir
+  pagedir_clear_page(fte->thread->pagedir, fte->upage);
+
+  free(fte);
 }

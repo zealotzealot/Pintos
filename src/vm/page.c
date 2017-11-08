@@ -15,6 +15,7 @@ bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * 
 
 bool page_load_file(struct page *);
 bool page_load_stack(struct page *);
+bool page_load_swap(struct page *);
 
 
 
@@ -84,6 +85,19 @@ void page_add_stack(void *addr) {
 
 
 
+void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
+  struct page *page = malloc(sizeof(struct page));
+
+  page->type = PAGE_SWAP;
+  page->upage = upage;
+  page->writable = writable;
+  page->slot = slot;
+
+  hash_insert(&pid_to_process_sema(pid)->page_hash, &page->elem_hash);
+}
+
+
+
 bool page_load(void * addr) {
   struct page *page = get_page(addr);
   if (page == NULL)
@@ -94,6 +108,8 @@ bool page_load(void * addr) {
       return page_load_file(page);
     case PAGE_STACK:
       return page_load_stack(page);
+    case PAGE_SWAP:
+      return page_load_swap(page);
     default:
       return false;
   }
@@ -111,6 +127,9 @@ bool page_load_file(struct page *page) {
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
 
+  hash_delete(current_page_hash(), &page->elem_hash);
+  free(page);
+
   return true;
 }
 
@@ -118,6 +137,22 @@ bool page_load_file(struct page *page) {
 
 bool page_load_stack(struct page *page) {
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER | PAL_ZERO);
+
+  hash_delete(current_page_hash(), &page->elem_hash);
+  free(page);
+
+  return true;
+}
+
+
+
+bool page_load_swap(struct page *page) {
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+
+  swap_in(kpage, page->slot);
+
+  hash_delete(current_page_hash(), &page->elem_hash);
+  free(page);
 
   return true;
 }
