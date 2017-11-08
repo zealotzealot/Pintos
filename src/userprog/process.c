@@ -684,15 +684,10 @@ setup_stack (void **esp)
 
   upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
 #ifdef VM
-  kpage = frame_allocate (upage, true, PAL_USER | PAL_ZERO);
-
-  success = (kpage != NULL);
-  if (success) {
-      *esp = PHYS_BASE;
-      thread_current()->esp = PHYS_BASE;
-  }
-  else
-      frame_free(kpage);
+  page_add_stack(upage);
+  success = true;
+  *esp = PHYS_BASE;
+  thread_current()->esp = PHYS_BASE;
 #else
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   if(kpage != NULL){

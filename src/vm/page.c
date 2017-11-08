@@ -117,9 +117,7 @@ bool page_load_file(struct page *page) {
 
 
 bool page_load_stack(struct page *page) {
-  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
-
-  memset (kpage, 0, PGSIZE);
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER | PAL_ZERO);
 
   return true;
 }
