@@ -117,7 +117,10 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+#ifdef VM
   thread_current()->esp = f->esp;
+#endif
+
   switch( get_user ((int *)(f->esp))) {
     case SYS_HALT:
       halt();
