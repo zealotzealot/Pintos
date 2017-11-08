@@ -1,5 +1,5 @@
-#ifndef VM_H
-#define VM_H
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
 
 #include "lib/kernel/hash.h"
 #include "userprog/process.h"
@@ -7,6 +7,7 @@
 enum page_type {
   PAGE_FILE,
   PAGE_STACK,
+  PAGE_SWAP,
 };
 
 struct page {
@@ -23,6 +24,9 @@ struct page {
 
   // No fields for stack
 
+  // Fields for swap
+  int slot;
+
   struct hash_elem elem_hash;
 };
 
@@ -31,6 +35,7 @@ void page_destroy(struct hash *);
 
 void page_add_file(struct file *, off_t, uint8_t *, size_t, size_t, bool);
 void page_add_stack(void *);
+void page_add_swap(void *, int, bool);
 bool page_load(void *);
 
 #endif
