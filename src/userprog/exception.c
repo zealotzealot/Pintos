@@ -156,7 +156,7 @@ page_fault (struct intr_frame *f)
   if (!user)
     exit(-1);
 
-  bool sg_1 = (fault_addr > f->esp) && (fault_addr < PHYS_BASE);
+  bool sg_1 = (fault_addr >= f->esp) && (fault_addr < PHYS_BASE);
   bool sg_2 = fault_addr == f->esp-4;
   bool sg_3 = fault_addr == f->esp-32;
   if (sg_1 || sg_2 || sg_3)
