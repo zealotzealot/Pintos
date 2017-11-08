@@ -163,7 +163,8 @@ page_fault (struct intr_frame *f)
   bool sg_1 = (fault_addr >= esp) && (fault_addr < PHYS_BASE);
   bool sg_2 = fault_addr == esp-4;
   bool sg_3 = fault_addr == esp-32;
-  if (sg_1 || sg_2 || sg_3)
+  bool sg_bad = (esp < PHYS_BASE - 0x80000);
+  if (!sg_bad && (sg_1 || sg_2 || sg_3))
     page_add_stack(fault_addr);
 
   if (page_load(fault_addr))
