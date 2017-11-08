@@ -687,8 +687,10 @@ setup_stack (void **esp)
   kpage = frame_allocate (upage, true, PAL_USER | PAL_ZERO);
 
   success = (kpage != NULL);
-  if (success)
+  if (success) {
       *esp = PHYS_BASE;
+      thread_current()->esp = PHYS_BASE;
+  }
   else
       frame_free(kpage);
 #else

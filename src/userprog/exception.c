@@ -153,13 +153,18 @@ page_fault (struct intr_frame *f)
 #ifdef VM
   if (!not_present)
     exit(-1);
-  if (!user)
-    exit(-1);
 
-  bool sg_1 = (fault_addr > f->esp) && (fault_addr < PHYS_BASE);
-  bool sg_2 = fault_addr == f->esp-4;
-  bool sg_3 = fault_addr == f->esp-32;
-  if (sg_1 || sg_2 || sg_3)
+  void *esp;
+  if (user)
+    esp = f->esp;
+  else
+    esp = thread_current()->esp;
+
+  bool sg_1 = (fault_addr >= esp) && (fault_addr < PHYS_BASE);
+  bool sg_2 = fault_addr == esp-4;
+  bool sg_3 = fault_addr == esp-32;
+  bool sg_bad = (esp < PHYS_BASE - 0x80000);
+  if (!sg_bad && (sg_1 || sg_2 || sg_3))
     page_add_stack(fault_addr);
 
   if (page_load(fault_addr))
