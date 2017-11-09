@@ -7,6 +7,7 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 
+bool lock_set;
 struct lock page_lock;
 
 struct hash *get_current_hash();
@@ -51,6 +52,10 @@ page_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux 
 
 void page_init(struct hash *h) {
   hash_init(h, page_hash_func, page_less_func, NULL);
+  if (!lock_set) {
+    lock_set = true;
+    lock_init(&page_lock);
+  }
 }
 
 void page_destroy(struct hash *h) {
@@ -86,6 +91,9 @@ void page_add_stack(void *addr) {
 
 
 void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
+  if (!lock_held_by_current_thread(&page_lock))
+    lock_acquire(&page_lock);
+
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_SWAP;
@@ -94,6 +102,9 @@ void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
   page->slot = slot;
 
   hash_insert(&pid_to_process_sema(pid)->page_hash, &page->elem_hash);
+
+  if (!lock_held_by_current_thread(&page_lock))
+    lock_release(&page_lock);
 }
 
 
@@ -118,11 +129,14 @@ bool page_load(void * addr) {
 
 
 bool page_load_file(struct page *page) {
+  lock_acquire(&page_lock);
+
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
 
   /* Load this page. */
   if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-    frame_free(kpage);
+    frame_free(kpage, false);
+    lock_release(&page_lock);
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
@@ -130,23 +144,29 @@ bool page_load_file(struct page *page) {
   hash_delete(current_page_hash(), &page->elem_hash);
   free(page);
 
+  lock_release(&page_lock);
   return true;
 }
 
 
 
 bool page_load_stack(struct page *page) {
+  lock_acquire(&page_lock);
+
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER | PAL_ZERO);
 
   hash_delete(current_page_hash(), &page->elem_hash);
   free(page);
 
+  lock_release(&page_lock);
   return true;
 }
 
 
 
 bool page_load_swap(struct page *page) {
+  lock_acquire(&page_lock);
+
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
 
   swap_in(kpage, page->slot);
@@ -154,5 +174,6 @@ bool page_load_swap(struct page *page) {
   hash_delete(current_page_hash(), &page->elem_hash);
   free(page);
 
+  lock_release(&page_lock);
   return true;
 }

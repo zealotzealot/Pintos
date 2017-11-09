@@ -63,6 +63,8 @@ struct frame_table_entry *choose_frame_evict() {
 }
 
 uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
+  lock_acquire(&lock_frame);
+
   uint8_t *kpage = palloc_get_page(flags);
   
   if (kpage == NULL) {
@@ -85,30 +87,34 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte->writable = writable;
   fte->thread = thread_current();
 
-  lock_acquire (&lock_frame);
   list_push_back (&LRU_list, &fte->elem_list);
   hash_insert (&frame_table, &fte->elem_hash);
-  lock_release (&lock_frame);
 
+  lock_release(&lock_frame);
   return kpage;
 }
 
 
 
-void frame_free (void *kpage){
+void frame_free (void *kpage, bool locked){
   if (kpage == NULL)
     return;
+
+  if (!locked)
+    lock_acquire(&lock_frame);
 
   palloc_free_page(kpage);
 
   struct frame_table_entry *fte = get_frame(kpage);
 
-  lock_acquire (&lock_frame);
   list_remove (&fte->elem_list);
   hash_delete (&frame_table, &fte->elem_hash);
-  lock_release (&lock_frame);
 
+  pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
   pagedir_clear_page(fte->thread->pagedir, fte->upage);
 
   free(fte);
+
+  if (!locked)
+    lock_release(&lock_frame);
 }
