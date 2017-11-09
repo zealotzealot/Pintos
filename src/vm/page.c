@@ -122,7 +122,7 @@ bool page_load_file(struct page *page) {
 
   /* Load this page. */
   if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-    frame_free(kpage);
+    frame_free(kpage, false);
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);

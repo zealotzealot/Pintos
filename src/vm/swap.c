@@ -55,5 +55,5 @@ void swap_out() {
 
   page_add_swap(fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
  
-  frame_free(kpage);
+  frame_free(kpage, true);
 }
