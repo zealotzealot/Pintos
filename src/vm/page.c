@@ -91,8 +91,11 @@ void page_add_stack(void *addr) {
 
 
 void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
-  if (!lock_held_by_current_thread(&page_lock))
+  bool lock_acquired=false;
+  if (!lock_held_by_current_thread(&page_lock)) {
     lock_acquire(&page_lock);
+    lock_acquired = true;
+  }
 
   struct page *page = malloc(sizeof(struct page));
 
@@ -103,7 +106,7 @@ void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
 
   hash_insert(&pid_to_process_sema(pid)->page_hash, &page->elem_hash);
 
-  if (!lock_held_by_current_thread(&page_lock))
+  if (lock_acquired)
     lock_release(&page_lock);
 }
 
