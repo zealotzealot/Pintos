@@ -13,7 +13,9 @@ enum page_type {
 struct page {
   // Common fields
   enum page_type type;
+  enum page_type pr_type;
   uint8_t *upage;
+  uint8_t *kpage;
   bool writable;
 
   // Fields for file
@@ -35,7 +37,7 @@ void page_destroy(struct hash *);
 
 void page_add_file(struct file *, off_t, uint8_t *, size_t, size_t, bool);
 void page_add_stack(void *);
-void page_add_swap(void *, int, bool, pid_t);
+void page_change_swap(struct hash *, void *, int, bool, pid_t);
 bool page_load(void *);
 
 #endif

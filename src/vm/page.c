@@ -8,7 +8,6 @@
 #include "userprog/process.h"
 
 bool lock_set;
-struct lock page_lock;
 
 struct hash *get_current_hash();
 unsigned page_hash_func (const struct hash_elem *, void *);
@@ -25,11 +24,14 @@ struct hash *current_page_hash() {
   return &current_process_sema()->page_hash;
 }
 
-struct page *get_page(void *addr) {
+struct page *get_page(struct hash *h, void *addr) {
   struct page dummy_page;
   dummy_page.upage = pg_round_down(addr);
 
-  struct hash_elem *hash_elem = hash_find(current_page_hash(), &dummy_page.elem_hash);
+  if (h==NULL)
+    h = current_page_hash();
+  
+  struct hash_elem *hash_elem = hash_find(h, &dummy_page.elem_hash);
   if (hash_elem == NULL)
     return NULL;
 
@@ -54,66 +56,92 @@ void page_init(struct hash *h) {
   hash_init(h, page_hash_func, page_less_func, NULL);
   if (!lock_set) {
     lock_set = true;
-    lock_init(&page_lock);
   }
 }
 
+//delete and free each fte, swafte, swap slot, pte
+hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
+    struct page *page = hash_entry (h, struct page, elem_hash);
+    
+    if (page->kpage == NULL)
+      frame_free (page->kpage, false);
+    
+    if(page->type == PAGE_SWAP)
+      swap_free (page->slot);
+
+    free(page);
+}
+
+//destroy page table
 void page_destroy(struct hash *h) {
-  hash_destroy(h, NULL);
+  hash_destroy (h, page_free);
 }
 
 void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable) {
+#ifdef DEBUG
+  printf("page add file in %p %s\n",upage,thread_current()->name);
+#endif
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_FILE;
   page->file = file;
   page->ofs = ofs;
   page->upage = upage;
+  page->kpage = NULL;
   page->page_read_bytes = page_read_bytes;
   page->page_zero_bytes = page_zero_bytes;
   page->writable = writable;
 
   hash_insert(current_page_hash(), &page->elem_hash);
+#ifdef DEBUG
+  printf("page add file out %p %s\n",upage,thread_current()->name);
+#endif
+
 }
 
 
 
 void page_add_stack(void *addr) {
+#ifdef DEBUG
+  printf("page add stack in %p %s\n",addr,thread_current()->name);
+#endif
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_STACK;
   page->upage = pg_round_down(addr);
+  page->kpage = NULL;
   page->writable = true;
 
   hash_insert(current_page_hash(), &page->elem_hash);
+#ifdef DEBUG
+  printf("page add stack out %p %s\n",addr,thread_current()->name);
+#endif
 }
 
 
 
-void page_add_swap(void *upage, int slot, bool writable, pid_t pid) {
-  if (!lock_held_by_current_thread(&page_lock))
-    lock_acquire(&page_lock);
-
-  struct page *page = malloc(sizeof(struct page));
-
+void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_t pid) {
+#ifdef DEBUG
+  printf("page add swap in %p %s\n",upage,thread_current()->name);
+#endif
+  struct page *page = get_page (h, upage);
+  page->pr_type = page->type;
   page->type = PAGE_SWAP;
-  page->upage = upage;
+  page->kpage = NULL;
   page->writable = writable;
   page->slot = slot;
 
-  hash_insert(&pid_to_process_sema(pid)->page_hash, &page->elem_hash);
-
-  if (!lock_held_by_current_thread(&page_lock))
-    lock_release(&page_lock);
+#ifdef DEBUG
+  printf("page add swap out %p %s\n",upage,thread_current()->name);
+#endif
 }
 
 
 
 bool page_load(void * addr) {
-  struct page *page = get_page(addr);
+  struct page *page = get_page (NULL, addr);
   if (page == NULL)
     return false;
-
   switch (page->type) {
     case PAGE_FILE:
       return page_load_file(page);
@@ -129,51 +157,57 @@ bool page_load(void * addr) {
 
 
 bool page_load_file(struct page *page) {
-  lock_acquire(&page_lock);
-
+#ifdef DEBUG
+  printf("page load file in %p %s\n",page->upage,thread_current()->name);
+#endif
+  
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+  page->kpage = kpage;
 
   /* Load this page. */
   if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
     frame_free(kpage, false);
-    lock_release(&page_lock);
     return false;
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
 
-  hash_delete(current_page_hash(), &page->elem_hash);
-  free(page);
-
-  lock_release(&page_lock);
+#ifdef DEBUG
+  printf("page load file out %p %s\n",page->upage,thread_current()->name);
+#endif
   return true;
 }
 
 
 
 bool page_load_stack(struct page *page) {
-  lock_acquire(&page_lock);
+#ifdef DEBUG
+  printf("page load stack in %p %s\n",page->upage,thread_current()->name);
+#endif
 
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER | PAL_ZERO);
+  page->kpage = kpage;
 
-  hash_delete(current_page_hash(), &page->elem_hash);
-  free(page);
-
-  lock_release(&page_lock);
+#ifdef DEBUG
+  printf("page load stack out %p %s\n",page->upage,thread_current()->name);
+#endif
   return true;
 }
 
 
 
 bool page_load_swap(struct page *page) {
-  lock_acquire(&page_lock);
+#ifdef DEBUG
+  printf("page load swap in %p %s\n",page->upage,thread_current()->name);
+#endif
 
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+  page->kpage = kpage;
+  page->type = page->pr_type;
 
   swap_in(kpage, page->slot);
 
-  hash_delete(current_page_hash(), &page->elem_hash);
-  free(page);
-
-  lock_release(&page_lock);
+#ifdef DEBUG
+  printf("page load swap out %p %s\n",page->upage,thread_current()->name);
+#endif
   return true;
 }
