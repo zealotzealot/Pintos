@@ -107,6 +107,9 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
 
 
 void page_add_stack(void *addr) {
+  if (get_page(NULL, pg_round_down(addr)) != NULL)
+    return;
+
 #ifdef DEBUG
   printf("page add stack in %p %s\n",addr,thread_current()->name);
 #endif
