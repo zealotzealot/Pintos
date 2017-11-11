@@ -5,6 +5,8 @@
 #include "threads/vaddr.h"
 #include "threads/synch.h"
 #include "threads/malloc.h"
+#include "userprog/process.h"
+#include "vm/page.h"
 #include "vm/swap.h"
 
 struct lock lock_frame;
@@ -54,12 +56,23 @@ void frame_init(){
 }
 
 struct frame_table_entry *choose_frame_evict() {
-  struct list_elem *elem = list_begin(&LRU_list);
+  struct list_elem *e;
+  struct frame_table_entry *fte;
+  struct hash *page_hash;
+  struct page *page;
 
-  if (elem == NULL)
-    return NULL;
+  for (e=list_begin(&LRU_list); e!=list_end(&LRU_list); e=list_next(e)){
+    fte = list_entry (e, struct frame_table_entry, elem_list);
 
-  return list_entry(elem, struct frame_table_entry, elem_list);
+    page_hash = &(((fte->thread)->process_sema)->page_hash);
+    if(page_hash == NULL)
+      ASSERT (false);
+
+    page = get_page (page_hash, fte->upage);
+    if(page->type == PAGE_LOADED)
+      return fte;
+  }
+  ASSERT (false);
 }
 
 uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
@@ -127,7 +140,7 @@ void frame_free (void *kpage, bool locked){
   list_remove (&fte->elem_list);
   hash_delete (&frame_table, &fte->elem_hash);
 
-  //pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
+  pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
   pagedir_clear_page(fte->thread->pagedir, fte->upage);
 
   free(fte);
