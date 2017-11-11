@@ -32,14 +32,6 @@ void set_exit_status (int);
 
 static struct list process_sema_list;
 
-#ifdef VM
-struct hash *pid_to_hash (int pid){
-  struct process_sema *process_sema;
-  process_sema = pid_to_process_sema (pid);
-  return &(process_sema->page_hash);
-}
-#endif
-
 void kill_children (int parent_pid){ //free process' children who is dead
   struct list_elem *e, *next;
   struct process_sema *process_sema;
@@ -73,6 +65,7 @@ void process_sema_init (struct process_sema *process_sema){
 #ifdef VM
   page_init(&process_sema->page_hash);
 #endif
+  thread_current()->process_sema = process_sema;
 }
 
 void set_exit_status (int status){

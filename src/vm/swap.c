@@ -72,7 +72,7 @@ void swap_out() {
   printf("swap out %p, %d\n",kpage, slot_start);
 #endif
 
-  struct hash *page_hash = pid_to_hash ((fte_evicted->thread)->tid);
+  struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
   if(page_hash == NULL)
     ASSERT(false);
 

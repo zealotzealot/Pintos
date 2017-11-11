@@ -8,6 +8,7 @@ enum page_type {
   PAGE_FILE,
   PAGE_STACK,
   PAGE_SWAP,
+  PAGE_LOADED,
 };
 
 struct page {

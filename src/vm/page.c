@@ -21,15 +21,18 @@ bool page_load_swap(struct page *);
 
 // Get page hash of current process
 struct hash *current_page_hash() {
-  return &current_process_sema()->page_hash;
+  return &((thread_current()->process_sema)->page_hash);
 }
 
 struct page *get_page(struct hash *h, void *addr) {
   struct page dummy_page;
   dummy_page.upage = pg_round_down(addr);
 
-  if (h==NULL)
+  if (h==NULL){
     h = current_page_hash();
+    if (h==NULL)
+      ASSERT(0);
+  }
   
   struct hash_elem *hash_elem = hash_find(h, &dummy_page.elem_hash);
   if (hash_elem == NULL)
@@ -74,6 +77,8 @@ hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
 
 //destroy page table
 void page_destroy(struct hash *h) {
+  if (h==NULL)
+    return;
   hash_destroy (h, page_free);
 }
 
@@ -171,9 +176,12 @@ bool page_load_file(struct page *page) {
   }
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
 
+  page->type = PAGE_LOADED;
+
 #ifdef DEBUG
   printf("page load file out %p %s\n",page->upage,thread_current()->name);
 #endif
+
   return true;
 }
 
@@ -186,6 +194,8 @@ bool page_load_stack(struct page *page) {
 
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER | PAL_ZERO);
   page->kpage = kpage;
+
+  page->type = PAGE_LOADED;
 
 #ifdef DEBUG
   printf("page load stack out %p %s\n",page->upage,thread_current()->name);
@@ -206,6 +216,7 @@ bool page_load_swap(struct page *page) {
 
   swap_in(kpage, page->slot);
 
+  page->type = PAGE_LOADED;
 #ifdef DEBUG
   printf("page load swap out %p %s\n",page->upage,thread_current()->name);
 #endif

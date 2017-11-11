@@ -16,10 +16,6 @@ void set_exit_status (int);
 struct process_sema *pid_to_process_sema(int);
 bool install_page (void *upage, void *kpage, bool writable);
 
-#ifdef VM
-struct hash *pid_to_hash (int);
-#endif
-
 struct process_sema
 {
   int pid;
