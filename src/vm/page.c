@@ -133,7 +133,6 @@ void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_
   printf("page add swap in %p %s\n",upage,thread_current()->name);
 #endif
   struct page *page = get_page (h, upage);
-  page->pr_type = page->type;
   page->type = PAGE_SWAP;
   page->kpage = NULL;
   page->writable = writable;
@@ -215,7 +214,6 @@ bool page_load_swap(struct page *page) {
 
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
   page->kpage = kpage;
-  page->type = page->pr_type;
 
   swap_in(kpage, page->slot);
 

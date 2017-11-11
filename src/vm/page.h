@@ -14,7 +14,6 @@ enum page_type {
 struct page {
   // Common fields
   enum page_type type;
-  enum page_type pr_type;
   uint8_t *upage;
   uint8_t *kpage;
   bool writable;
