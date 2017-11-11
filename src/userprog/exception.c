@@ -165,15 +165,18 @@ page_fault (struct intr_frame *f)
     esp = thread_current()->esp;
 
   bool sg_1 = (fault_addr >= esp) && (fault_addr < PHYS_BASE);
-  bool sg_2 = fault_addr == esp-4;
-  bool sg_3 = fault_addr == esp-32;
-  bool sg_bad = (esp < PHYS_BASE - 0x80000);
+  bool sg_2 = fault_addr == f->esp-4;
+  bool sg_3 = fault_addr == f->esp-32;
+  bool sg_bad = (fault_addr < PHYS_BASE - 0x800000) || (fault_addr >= PHYS_BASE);
   if (!sg_bad && (sg_1 || sg_2 || sg_3))
     page_add_stack(fault_addr);
 
   if (page_load(fault_addr))
     return;
 #endif
+
+  f->eip = f->eax;
+  f->eax = 0xffffffff;
 
   exit (-1);
   /* To implement virtual memory, delete the rest of the function

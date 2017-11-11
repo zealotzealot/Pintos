@@ -4,6 +4,8 @@
 #include "lib/kernel/hash.h"
 #include "threads/palloc.h"
 
+struct lock lock_frame;
+
 struct frame_table_entry {
   void *upage;
   void *kpage;

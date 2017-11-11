@@ -9,7 +9,6 @@
 #include "vm/page.h"
 #include "vm/swap.h"
 
-struct lock lock_frame;
 struct list LRU_list;
 struct hash frame_table;
 
@@ -140,7 +139,6 @@ void frame_free (void *kpage, bool locked){
   list_remove (&fte->elem_list);
   hash_delete (&frame_table, &fte->elem_hash);
 
-  pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
   pagedir_clear_page(fte->thread->pagedir, fte->upage);
 
   free(fte);

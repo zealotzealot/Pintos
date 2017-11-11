@@ -13,7 +13,6 @@
 
 struct disk *swap_disk;
 struct bitmap *swap_bitmap;
-struct lock swap_lock;
 
 
 
@@ -25,12 +24,11 @@ void swap_init(){
 }
 
 void swap_free (int slot){
-  lock_acquire (&swap_lock);
+  ASSERT(lock_held_by_current_thread(&swap_lock));
   int i;
   for(i=0; i<8; i++){
     bitmap_flip (swap_bitmap, slot+i);
   }
-  lock_release (&swap_lock);
 }
 
 void swap_in(void *kpage, int slot){

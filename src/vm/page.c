@@ -6,6 +6,8 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 
 bool lock_set;
 
@@ -67,7 +69,7 @@ hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
     struct page *page = hash_entry (h, struct page, elem_hash);
     
     if (page->kpage != NULL)
-      frame_free (page->kpage, false);
+      frame_free (page->kpage, true);
     
     if(page->type == PAGE_SWAP)
       swap_free (page->slot);
@@ -79,7 +81,11 @@ hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
 void page_destroy(struct hash *h) {
   if (h==NULL)
     return;
+  lock_acquire(&lock_frame);
+  lock_acquire(&swap_lock);
   hash_destroy (h, page_free);
+  lock_release(&swap_lock);
+  lock_release(&lock_frame);
 }
 
 void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable) {
@@ -107,6 +113,9 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
 
 
 void page_add_stack(void *addr) {
+  if (get_page(NULL, pg_round_down(addr)) != NULL)
+    return;
+
 #ifdef DEBUG
   printf("page add stack in %p %s\n",addr,thread_current()->name);
 #endif
@@ -130,7 +139,6 @@ void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_
   printf("page add swap in %p %s\n",upage,thread_current()->name);
 #endif
   struct page *page = get_page (h, upage);
-  page->pr_type = page->type;
   page->type = PAGE_SWAP;
   page->kpage = NULL;
   page->writable = writable;
@@ -170,10 +178,8 @@ bool page_load_file(struct page *page) {
   page->kpage = kpage;
 
   /* Load this page. */
-  if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes) {
-    frame_free(kpage, false);
-    return false;
-  }
+  if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs) != (int) page->page_read_bytes)
+    ASSERT(0);
   memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
 
   page->type = PAGE_LOADED;
@@ -212,7 +218,6 @@ bool page_load_swap(struct page *page) {
 
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
   page->kpage = kpage;
-  page->type = page->pr_type;
 
   swap_in(kpage, page->slot);
 
