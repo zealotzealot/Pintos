@@ -63,40 +63,54 @@ struct frame_table_entry *choose_frame_evict() {
 }
 
 uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
+#ifdef DEBUG
+  printf("frame_allocate in upage %p %s\n",upage,thread_current()->name);
+#endif
   lock_acquire(&lock_frame);
-
+  
   uint8_t *kpage = palloc_get_page(flags);
   
   if (kpage == NULL) {
     swap_out();
     kpage = palloc_get_page(flags);
     if (kpage == NULL) {
+      lock_release (&lock_frame);
       return NULL;
     }
   }
-
+  
   if (!install_page(upage, kpage, writable)) {
     palloc_free_page(kpage);
+    lock_release (&lock_frame);
     return NULL;
   }
-
+  
   struct frame_table_entry *fte;
   fte = (struct frame_table_entry *) malloc (sizeof(struct frame_table_entry));
   fte->upage = (void *) ((uintptr_t) upage & ~PGMASK);
   fte->kpage = (void *) ((uintptr_t) kpage & ~PGMASK);
   fte->writable = writable;
   fte->thread = thread_current();
-
+  
   list_push_back (&LRU_list, &fte->elem_list);
   hash_insert (&frame_table, &fte->elem_hash);
 
+#ifdef DEBUG
+  printf("frame_allocate kpage %p\n",fte->kpage);
+#endif
   lock_release(&lock_frame);
+#ifdef DEBUG
+  printf("frame_allocate out upage %p %s\n",upage,thread_current()->name);
+#endif
   return kpage;
 }
 
 
 
 void frame_free (void *kpage, bool locked){
+#ifdef DEBUG
+  printf("frame_free in kpage %p %s\n",kpage,thread_current()->name);
+#endif
   if (kpage == NULL)
     return;
 
@@ -107,14 +121,20 @@ void frame_free (void *kpage, bool locked){
 
   struct frame_table_entry *fte = get_frame(kpage);
 
+  if(fte == NULL)
+    ASSERT (false);
+
   list_remove (&fte->elem_list);
   hash_delete (&frame_table, &fte->elem_hash);
 
-  pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
+  //pagedir_set_dirty(fte->thread->pagedir, fte->upage, true);
   pagedir_clear_page(fte->thread->pagedir, fte->upage);
 
   free(fte);
 
   if (!locked)
     lock_release(&lock_frame);
+#ifdef DEBUG
+  printf("frame_free out kpage %p %s\n",kpage,thread_current()->name);
+#endif
 }

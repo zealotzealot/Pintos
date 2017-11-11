@@ -24,36 +24,64 @@ void swap_init(){
   lock_init(&swap_lock);
 }
 
-
+void swap_free (int slot){
+  lock_acquire (&swap_lock);
+  int i;
+  for(i=0; i<8; i++){
+    bitmap_flip (swap_bitmap, slot+i);
+  }
+  lock_release (&swap_lock);
+}
 
 void swap_in(void *kpage, int slot){
+#ifdef DEBUG
+  printf("swap in in %p, %d\n",kpage, slot);
+#endif
   lock_acquire(&swap_lock);
   int i;
   for (i=0; i<8; i++){
     disk_read (swap_disk, slot+i, kpage+i*DISK_SECTOR_SIZE);
-  bitmap_flip (swap_bitmap, slot+i);
+    bitmap_flip (swap_bitmap, slot+i);
   }
   lock_release(&swap_lock);
+#ifdef DEBUG
+  printf("swap in out %p, %d\n",kpage,slot);
+#endif
 }
 
 
 
 void swap_out() {
+#ifdef DEBUG
+  printf("swap out in\n");
+#endif
+  lock_acquire(&swap_lock);
+  
   struct frame_table_entry *fte_evicted = choose_frame_evict();
   if(fte_evicted == NULL)
     ASSERT(0);
 
   void *kpage = fte_evicted->kpage;
-
-  lock_acquire(&swap_lock);
+  
   int slot_start,i;
   slot_start = bitmap_scan_and_flip(swap_bitmap, 0, 8, false);
   for(i=0; i<8; i++){
     disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
   }
-  lock_release(&swap_lock);
+#ifdef DEBUG
+  printf("swap out %p, %d\n",kpage, slot_start);
+#endif
 
-  page_add_swap(fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
+  struct hash *page_hash = pid_to_hash ((fte_evicted->thread)->tid);
+  if(page_hash == NULL)
+    ASSERT(false);
+
+  page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
  
   frame_free(kpage, true);
+
+ lock_release(&swap_lock);
+#ifdef DEBUG
+ printf("swap out out\n");
+#endif
 }
