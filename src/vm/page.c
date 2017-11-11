@@ -63,7 +63,7 @@ void page_init(struct hash *h) {
 hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
     struct page *page = hash_entry (h, struct page, elem_hash);
     
-    if (page->kpage == NULL)
+    if (page->kpage != NULL)
       frame_free (page->kpage, false);
     
     if(page->type == PAGE_SWAP)
