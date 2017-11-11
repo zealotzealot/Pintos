@@ -9,7 +9,6 @@
 #include "vm/page.h"
 #include "vm/swap.h"
 
-struct lock lock_frame;
 struct list LRU_list;
 struct hash frame_table;
 

@@ -6,6 +6,8 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "userprog/process.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 
 bool lock_set;
 
@@ -67,7 +69,7 @@ hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
     struct page *page = hash_entry (h, struct page, elem_hash);
     
     if (page->kpage != NULL)
-      frame_free (page->kpage, false);
+      frame_free (page->kpage, true);
     
     if(page->type == PAGE_SWAP)
       swap_free (page->slot);
@@ -79,7 +81,11 @@ hash_action_func *page_free (struct hash_elem *h, void *aux UNUSED){
 void page_destroy(struct hash *h) {
   if (h==NULL)
     return;
+  lock_acquire(&lock_frame);
+  lock_acquire(&swap_lock);
   hash_destroy (h, page_free);
+  lock_release(&swap_lock);
+  lock_release(&lock_frame);
 }
 
 void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable) {

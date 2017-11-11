@@ -3,6 +3,8 @@
 
 #include "vm/frame.h"
 
+struct lock swap_lock;
+
 void swap_init (void);
 void swap_in (void *, int);
 void swap_out(void);
