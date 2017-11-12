@@ -55,14 +55,27 @@ void swap_out() {
 #endif
   lock_acquire(&swap_lock);
   
+  enum intr_level old_level = intr_disable();
+
   struct frame_table_entry *fte_evicted = choose_frame_evict();
   if(fte_evicted == NULL)
     ASSERT(0);
 
+  int slot_start = bitmap_scan_and_flip(swap_bitmap, 0, 8, false);
+
+  struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
+  if (page_hash == NULL)
+    ASSERT(0);
+
+  page_change_swap(page_hash, fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
+
+  pagedir_clear_page(fte_evicted->thread->pagedir, fte_evicted->upage);
+
+  intr_set_level(old_level);
+
   void *kpage = fte_evicted->kpage;
   
-  int slot_start,i;
-  slot_start = bitmap_scan_and_flip(swap_bitmap, 0, 8, false);
+  int i;
   for(i=0; i<8; i++){
     disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
   }
@@ -70,12 +83,6 @@ void swap_out() {
   printf("swap out %p, %d\n",kpage, slot_start);
 #endif
 
-  struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
-  if(page_hash == NULL)
-    ASSERT(false);
-
-  page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
- 
   frame_free(kpage, true);
 
  lock_release(&swap_lock);
