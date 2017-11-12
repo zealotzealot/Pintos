@@ -311,7 +311,7 @@ process_exit (void)
             = pid_to_process_sema (curr->tid);
 
     sema_up_all (&process_sema->sema);
-    kill_children(curr->tid); //free children's memory
+    //kill_children(curr->tid); //free children's memory
     process_sema->alive = 0;
     executable_file = process_sema->executable_file;
 #ifdef VM
@@ -327,11 +327,13 @@ process_exit (void)
       close(target->fd);
     }
 
+    /*
     //if 부모가 죽음, child 혼자서 다 free해야함
     if(process_sema->parent_alive == 0){
       list_remove(&(process_sema->elem));
       free(process_sema);
     }
+    */
   }
 
   uint32_t *pd;
