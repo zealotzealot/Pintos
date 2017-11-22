@@ -17,6 +17,7 @@ struct page {
   uint8_t *upage;
   uint8_t *kpage;
   bool writable;
+  bool pin;
 
   // Fields for file
   struct file *file;
@@ -31,6 +32,8 @@ struct page {
 
   struct hash_elem elem_hash;
 };
+
+void page_set_pin(void *, unsigned, bool);
 
 void page_init(struct hash *);
 void page_destroy(struct hash *);

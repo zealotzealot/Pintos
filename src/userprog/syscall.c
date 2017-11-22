@@ -7,7 +7,7 @@
 
 #include "filesys/filesys.h"
 #include "userprog/process.h"
-
+#include "vm/page.h"
 
 
 struct file_desc * get_file_desc(int);
@@ -269,7 +269,13 @@ int read (int fd, void *buffer, unsigned size) {
   struct file_desc *target = get_file_desc(fd);
 
   lock_acquire(&file_lock);
+#ifdef VM
+  page_set_pin (buffer, size, true);
+#endif
   int result = file_read(target->file, buffer, size);
+#ifdef VM
+  page_set_pin (buffer, size, false);
+#endif
   lock_release(&file_lock);
   return result;
 }
@@ -286,7 +292,13 @@ int write (int fd, const void *buffer, unsigned size) {
   struct file_desc *target = get_file_desc(fd);
 
   lock_acquire(&file_lock);
+#ifdef VM
+  page_set_pin (buffer, size, true);
+#endif
   int result = file_write(target->file, buffer, size);
+#ifdef VM
+  page_set_pin (buffer, size, false);
+#endif
   lock_release(&file_lock);
   return result;
 }

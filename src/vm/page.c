@@ -45,6 +45,21 @@ struct page *get_page(struct hash *h, void *addr) {
                     elem_hash);
 }
 
+void page_set_pin (void *buffer, unsigned size, bool pin){
+  void *upage;
+  struct page *page;
+  int differ;
+  differ = thread_current()->esp - (buffer + size - 1);
+  for (upage = pg_round_down(buffer); upage < buffer+size; upage+=PGSIZE){
+    page = get_page (NULL, upage);
+    /*if(page == NULL){
+      page_add_stack (upage);
+      page = get_page (NULL, upage);
+    }*/
+    page->pin = pin;
+  }
+}
+
 unsigned
 page_hash_func (const struct hash_elem *p_, void *aux UNUSED){
   const struct page *p = hash_entry (p_, struct page, elem_hash);
@@ -95,6 +110,7 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_FILE;
+  page->pin = false;
   page->file = file;
   page->ofs = ofs;
   page->upage = upage;
@@ -119,14 +135,18 @@ void page_add_stack(void *addr) {
 #ifdef DEBUG
   printf("page add stack in %p %s\n",addr,thread_current()->name);
 #endif
-  struct page *page = malloc(sizeof(struct page));
+  void *upage;
+  for(upage=pg_round_down(addr);
+      get_page(NULL,upage)==NULL && upage<PHYS_BASE; upage+=PGSIZE){
+    struct page *page = malloc(sizeof(struct page));
 
-  page->type = PAGE_STACK;
-  page->upage = pg_round_down(addr);
-  page->kpage = NULL;
-  page->writable = true;
-
-  hash_insert(current_page_hash(), &page->elem_hash);
+    page->type = PAGE_STACK;
+    page->pin = false;
+    page->upage = upage;
+    page->kpage = NULL;
+    page->writable = true;
+    hash_insert(current_page_hash(), &page->elem_hash);
+  }
 #ifdef DEBUG
   printf("page add stack out %p %s\n",addr,thread_current()->name);
 #endif
