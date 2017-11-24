@@ -157,6 +157,8 @@ page_fault (struct intr_frame *f)
 #ifdef VM
   if (!not_present)
     exit(-1);
+  if (!is_user_vaddr(fault_addr))
+    exit(-1);
 
   void *esp;
   if (user)

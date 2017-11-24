@@ -309,14 +309,14 @@ process_exit (void)
   enum intr_level old_level = intr_disable();
 
   struct thread *curr = thread_current ();
-  struct file *executable_file;
+  struct file *executable_file = NULL;
 
   if(check_pid_to_process_sema (curr->tid)){
     struct process_sema *process_sema
             = pid_to_process_sema (curr->tid);
 
     sema_up_all (&process_sema->sema);
-    kill_children(curr->tid); //free children's memory
+    //kill_children(curr->tid); //free children's memory
     process_sema->alive = 0;
     executable_file = process_sema->executable_file;
 
@@ -334,10 +334,12 @@ process_exit (void)
 #endif
 
     //if 부모가 죽음, child 혼자서 다 free해야함
+    /*
     if(process_sema->parent_alive == 0){
       list_remove(&(process_sema->elem));
       free(process_sema);
     }
+    */
   }
 
   uint32_t *pd;
