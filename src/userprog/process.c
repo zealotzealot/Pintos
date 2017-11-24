@@ -319,9 +319,6 @@ process_exit (void)
     kill_children(curr->tid); //free children's memory
     process_sema->alive = 0;
     executable_file = process_sema->executable_file;
-#ifdef VM
-    page_destroy(&process_sema->page_hash);
-#endif
 
     struct list *file_desc_list = &(process_sema->file_desc_list);
     struct list_elem *e, *next;
@@ -331,6 +328,10 @@ process_exit (void)
       target = list_entry(e, struct file_desc, elem);
       close(target->fd);
     }
+
+#ifdef VM
+    page_destroy(&process_sema->page_hash);
+#endif
 
     //if 부모가 죽음, child 혼자서 다 free해야함
     if(process_sema->parent_alive == 0){

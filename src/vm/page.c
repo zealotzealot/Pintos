@@ -18,6 +18,7 @@ bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * 
 bool page_load_file(struct page *);
 bool page_load_stack(struct page *);
 bool page_load_swap(struct page *);
+bool page_load_mmap(struct page *);
 
 
 
@@ -52,10 +53,6 @@ void page_set_pin (void *buffer, unsigned size, bool pin){
   differ = thread_current()->esp - (buffer + size - 1);
   for (upage = pg_round_down(buffer); upage < buffer+size; upage+=PGSIZE){
     page = get_page (NULL, upage);
-    /*if(page == NULL){
-      page_add_stack (upage);
-      page = get_page (NULL, upage);
-    }*/
     page->pin = pin;
   }
 }
@@ -154,6 +151,46 @@ void page_add_stack(void *addr) {
 
 
 
+bool page_add_mmap(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable){
+  if (get_page(NULL, upage) != NULL)
+    return false;
+  if (pg_ofs(upage) != 0)
+    ASSERT (0);
+  struct page *page = malloc(sizeof(struct page));
+  page->type = PAGE_MMAP;
+  page->pin = false;
+  page->file = file;
+  page->ofs = ofs;
+  page->upage = upage;
+  page->kpage = NULL;
+  page->page_read_bytes = page_read_bytes;
+  page->page_zero_bytes = page_zero_bytes;
+  page->writable = writable;
+  hash_insert(current_page_hash(), &page->elem_hash);
+  return true;
+}
+
+
+
+void page_free_mmap(void *addr){
+  struct page *page = get_page (NULL, addr);
+
+  if (page->type != PAGE_MMAP)
+    ASSERT (0);
+
+  if (page->kpage != NULL){
+    if (file_write_at (page->file, page->kpage, page->page_read_bytes, page->ofs)
+        != (int) page->page_read_bytes)
+      ASSERT(0);
+    frame_free (page->kpage, false);
+  }
+
+  hash_delete (current_page_hash(), &page->elem_hash);
+  free (page);
+}
+
+
+
 void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_t pid) {
 #ifdef DEBUG
   printf("page add swap in %p %s\n",upage,thread_current()->name);
@@ -182,6 +219,8 @@ bool page_load(void * addr) {
       return page_load_stack(page);
     case PAGE_SWAP:
       return page_load_swap(page);
+    case PAGE_MMAP:
+      return page_load_mmap(page);
     default:
       return false;
   }
@@ -245,5 +284,19 @@ bool page_load_swap(struct page *page) {
 #ifdef DEBUG
   printf("page load swap out %p %s\n",page->upage,thread_current()->name);
 #endif
+  return true;
+}
+
+
+bool page_load_mmap(struct page *page) {
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+  page->kpage = kpage;
+  
+  if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs)
+      != (int) page->page_read_bytes)
+    ASSERT(0);
+
+  memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
+  
   return true;
 }
