@@ -302,8 +302,10 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+#ifdef VM
   lock_acquire (&lock_frame);
   lock_acquire (&swap_lock);
+#endif
   enum intr_level old_level = intr_disable();
 
   struct thread *curr = thread_current ();
@@ -317,9 +319,6 @@ process_exit (void)
     kill_children(curr->tid); //free children's memory
     process_sema->alive = 0;
     executable_file = process_sema->executable_file;
-#ifdef VM
-    page_destroy(&process_sema->page_hash);
-#endif
 
     struct list *file_desc_list = &(process_sema->file_desc_list);
     struct list_elem *e, *next;
@@ -329,6 +328,10 @@ process_exit (void)
       target = list_entry(e, struct file_desc, elem);
       close(target->fd);
     }
+
+#ifdef VM
+    page_destroy(&process_sema->page_hash);
+#endif
 
     //if 부모가 죽음, child 혼자서 다 free해야함
     if(process_sema->parent_alive == 0){
@@ -359,8 +362,10 @@ process_exit (void)
   if (executable_file != NULL)
     file_close(executable_file);
 
+#ifdef VM
   lock_release (&lock_frame);
   lock_release (&swap_lock);
+#endif
   intr_set_level(old_level);
 }
 

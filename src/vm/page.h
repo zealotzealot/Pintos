@@ -8,6 +8,7 @@ enum page_type {
   PAGE_FILE,
   PAGE_STACK,
   PAGE_SWAP,
+  PAGE_MMAP,
   PAGE_LOADED,
 };
 
@@ -17,6 +18,7 @@ struct page {
   uint8_t *upage;
   uint8_t *kpage;
   bool writable;
+  bool pin;
 
   // Fields for file
   struct file *file;
@@ -29,8 +31,15 @@ struct page {
   // Fields for swap
   int slot;
 
+  // No fileds for mmap
+
   struct hash_elem elem_hash;
 };
+
+bool page_add_mmap(struct file *, off_t, uint8_t *, size_t, size_t, bool);
+void page_free_mmap(void *);
+
+void page_set_pin(void *, unsigned, bool);
 
 void page_init(struct hash *);
 void page_destroy(struct hash *);

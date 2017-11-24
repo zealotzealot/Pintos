@@ -18,6 +18,7 @@ bool page_less_func (const struct hash_elem *, const struct hash_elem *, void * 
 bool page_load_file(struct page *);
 bool page_load_stack(struct page *);
 bool page_load_swap(struct page *);
+bool page_load_mmap(struct page *);
 
 
 
@@ -43,6 +44,17 @@ struct page *get_page(struct hash *h, void *addr) {
   return hash_entry(hash_elem,
                     struct page,
                     elem_hash);
+}
+
+void page_set_pin (void *buffer, unsigned size, bool pin){
+  void *upage;
+  struct page *page;
+  int differ;
+  differ = thread_current()->esp - (buffer + size - 1);
+  for (upage = pg_round_down(buffer); upage < buffer+size; upage+=PGSIZE){
+    page = get_page (NULL, upage);
+    page->pin = pin;
+  }
 }
 
 unsigned
@@ -95,6 +107,7 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   struct page *page = malloc(sizeof(struct page));
 
   page->type = PAGE_FILE;
+  page->pin = false;
   page->file = file;
   page->ofs = ofs;
   page->upage = upage;
@@ -119,17 +132,61 @@ void page_add_stack(void *addr) {
 #ifdef DEBUG
   printf("page add stack in %p %s\n",addr,thread_current()->name);
 #endif
-  struct page *page = malloc(sizeof(struct page));
+  void *upage;
+  for(upage=pg_round_down(addr);
+      get_page(NULL,upage)==NULL && upage<PHYS_BASE; upage+=PGSIZE){
+    struct page *page = malloc(sizeof(struct page));
 
-  page->type = PAGE_STACK;
-  page->upage = pg_round_down(addr);
-  page->kpage = NULL;
-  page->writable = true;
-
-  hash_insert(current_page_hash(), &page->elem_hash);
+    page->type = PAGE_STACK;
+    page->pin = false;
+    page->upage = upage;
+    page->kpage = NULL;
+    page->writable = true;
+    hash_insert(current_page_hash(), &page->elem_hash);
+  }
 #ifdef DEBUG
   printf("page add stack out %p %s\n",addr,thread_current()->name);
 #endif
+}
+
+
+
+bool page_add_mmap(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable){
+  if (get_page(NULL, upage) != NULL)
+    return false;
+  if (pg_ofs(upage) != 0)
+    ASSERT (0);
+  struct page *page = malloc(sizeof(struct page));
+  page->type = PAGE_MMAP;
+  page->pin = false;
+  page->file = file;
+  page->ofs = ofs;
+  page->upage = upage;
+  page->kpage = NULL;
+  page->page_read_bytes = page_read_bytes;
+  page->page_zero_bytes = page_zero_bytes;
+  page->writable = writable;
+  hash_insert(current_page_hash(), &page->elem_hash);
+  return true;
+}
+
+
+
+void page_free_mmap(void *addr){
+  struct page *page = get_page (NULL, addr);
+
+  if (page->type != PAGE_MMAP)
+    ASSERT (0);
+
+  if (page->kpage != NULL){
+    if (file_write_at (page->file, page->kpage, page->page_read_bytes, page->ofs)
+        != (int) page->page_read_bytes)
+      ASSERT(0);
+    frame_free (page->kpage, false);
+  }
+
+  hash_delete (current_page_hash(), &page->elem_hash);
+  free (page);
 }
 
 
@@ -162,6 +219,8 @@ bool page_load(void * addr) {
       return page_load_stack(page);
     case PAGE_SWAP:
       return page_load_swap(page);
+    case PAGE_MMAP:
+      return page_load_mmap(page);
     default:
       return false;
   }
@@ -225,5 +284,19 @@ bool page_load_swap(struct page *page) {
 #ifdef DEBUG
   printf("page load swap out %p %s\n",page->upage,thread_current()->name);
 #endif
+  return true;
+}
+
+
+bool page_load_mmap(struct page *page) {
+  uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
+  page->kpage = kpage;
+  
+  if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs)
+      != (int) page->page_read_bytes)
+    ASSERT(0);
+
+  memset (kpage + page->page_read_bytes, 0, page->page_zero_bytes);
+  
   return true;
 }

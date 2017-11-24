@@ -8,6 +8,9 @@
 #include "filesys/filesys.h"
 #include "userprog/process.h"
 
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 
 struct file_desc * get_file_desc(int);
@@ -24,11 +27,19 @@ int write(int, const void *, unsigned);
 void seek(int, unsigned);
 unsigned tell(int);
 void close(int);
-
+unsigned mmap_hash_func(const struct hash_elem *, void *);
+bool mmap_less_func(const struct hash_elem *, const struct hash_elem *, void * UNUSED);
+int mmap(int, void *);
+void munmap(int);
 
 int file_desc_idx=2;
+int mmap_idx=1;
 struct lock fork_lock;
 struct lock file_lock;
+#ifdef VM
+struct lock mmap_lock;
+struct hash mmap_table;
+#endif
 
 
 
@@ -103,6 +114,7 @@ struct file_desc * get_file_desc(int fd) {
   }
 
   // Matching fd not found
+  return NULL;
 }
 
 
@@ -111,6 +123,10 @@ syscall_init (void)
 {
   lock_init(&fork_lock);
   lock_init(&file_lock);
+#ifdef VM
+  lock_init(&mmap_lock);
+  hash_init(&mmap_table, mmap_hash_func, mmap_less_func, NULL);
+#endif
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -170,6 +186,15 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_CLOSE:
       close (get_user ((int *)(f->esp)+1));
       break;
+#ifdef VM
+    case SYS_MMAP:
+      f->eax = mmap (get_user ((int *)(f->esp)+1),
+                    get_user ((int *)(f->esp)+2));
+      break;
+    case SYS_MUNMAP:
+      munmap (get_user ((int *)(f->esp)+1));
+      break;
+#endif
   }
 }
 
@@ -239,11 +264,13 @@ int open (const char *file) {
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = res_file;
   target->fd = file_desc_idx;
+  list_init (&target->mmap_list);
   strlcpy(target->name, file, strlen(file)+1);
 
   struct process_sema *process = current_process_sema();
   list_push_back(&(process->file_desc_list),
                  &(target->elem));
+
 
   return file_desc_idx++;
 }
@@ -269,7 +296,13 @@ int read (int fd, void *buffer, unsigned size) {
   struct file_desc *target = get_file_desc(fd);
 
   lock_acquire(&file_lock);
+/*#ifdef VM
+  page_set_pin (buffer, size, true);
+#endif*/
   int result = file_read(target->file, buffer, size);
+/*#ifdef VM
+  page_set_pin (buffer, size, false);
+#endif*/
   lock_release(&file_lock);
   return result;
 }
@@ -286,7 +319,13 @@ int write (int fd, const void *buffer, unsigned size) {
   struct file_desc *target = get_file_desc(fd);
 
   lock_acquire(&file_lock);
+/*#ifdef VM
+  page_set_pin (buffer, size, true);
+#endif*/
   int result = file_write(target->file, buffer, size);
+/*#ifdef VM
+  page_set_pin (buffer, size, false);
+#endif*/
   lock_release(&file_lock);
   return result;
 }
@@ -317,12 +356,126 @@ unsigned tell (int fd) {
 void close (int fd) {
   if (fd<2 || fd>=file_desc_idx)
     exit(-1);
-
   struct file_desc *target = get_file_desc(fd);
+  
+  if(target == NULL)
+    return;
 
+#ifdef VM
+  lock_acquire(&mmap_lock);
+  struct list_elem *e, *next;
+  struct mte *mte;
+  struct list *mmap_list = &(target->mmap_list);
+  for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
+    next = list_next(e);
+    mte = list_entry (e, struct mte, elem_list);
+    munmap (mte->map_id);
+  }
+  lock_release(&mmap_lock);
+#endif
   lock_acquire(&file_lock);
   file_close(target->file);
   lock_release(&file_lock);
   list_remove(&(target->elem));
   free(target);
 }
+
+
+#ifdef VM
+unsigned
+mmap_hash_func (const struct hash_elem *p_, void *aux UNUSED){
+  const struct mte *p = hash_entry (p_, struct mte, elem_hash);
+  return hash_bytes (&p->map_id, sizeof p->map_id);
+}
+
+bool
+mmap_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){
+  return hash_entry(a, struct mte, elem_hash)->map_id
+          < hash_entry(b, struct mte, elem_hash)->map_id;
+}
+
+int mmap (int fd, void *addr) {
+
+  if (fd <= 1 || addr == 0 || pg_ofs(addr) != 0)
+    return -1;
+
+  int size = filesize(fd);
+  if (size == 0)
+    return -1;
+
+  lock_acquire(&mmap_lock);
+
+  struct file_desc *file_desc = get_file_desc(fd);
+  int page_read_bytes, page_zero_bytes;
+
+  void *upage;
+
+  for (upage=addr; upage<addr+size; upage+=PGSIZE){
+    if (upage+PGSIZE < addr+size){
+      page_read_bytes = PGSIZE;
+      page_zero_bytes = 0;
+    }
+    else{
+      page_read_bytes = addr + size - upage;
+      page_zero_bytes = PGSIZE - page_read_bytes;
+    }
+    if (!page_add_mmap (file_desc->file, upage-addr, upage,
+        page_read_bytes, page_zero_bytes, true)){
+      void *i;
+      for (i=addr; i<upage; i+=PGSIZE){
+        page_free_mmap (i);
+      }
+      return -1;
+    }
+  }
+
+  struct mte *mte;
+  mte = (struct mte *) malloc (sizeof(struct mte));
+  mte->map_id = ++mmap_idx;
+  mte->fd = fd;
+  mte->base = addr;
+  mte->length = size;
+  
+  list_push_back (&file_desc->mmap_list, &mte->elem_list);
+  hash_insert (&mmap_table, &mte->elem_hash);
+
+  lock_release(&mmap_lock);
+  return mmap_idx;
+}
+
+
+
+void munmap (int map_id) {
+  struct mte dummy_mte;
+  dummy_mte.map_id = map_id;
+
+  bool lock_set = false;
+  if(lock_held_by_current_thread(&mmap_lock))
+    lock_set = true;
+  
+  if(lock_set == false)
+    lock_acquire (&mmap_lock);
+  
+  struct hash_elem *hash_elem = hash_find (&mmap_table, &dummy_mte.elem_hash);
+  if (hash_elem == NULL){
+    if(lock_set == false)
+      lock_release (&mmap_lock);
+    return;
+  }
+
+  struct mte *mte = hash_entry (hash_elem, struct mte, elem_hash);
+
+  void *upage;
+
+  for (upage=mte->base; upage<(mte->base)+(mte->length); upage+=PGSIZE){
+    page_free_mmap (upage);
+  }
+
+  list_remove(&mte->elem_list);
+  hash_delete (&mmap_table, &mte->elem_hash);
+  free (mte);
+  
+  if(lock_set == false)
+    lock_release (&mmap_lock);
+}
+#endif
