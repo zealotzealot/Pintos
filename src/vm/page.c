@@ -182,7 +182,10 @@ void page_free_mmap(void *addr){
     if (file_write_at (page->file, page->kpage, page->page_read_bytes, page->ofs)
         != (int) page->page_read_bytes)
       ASSERT(0);
-    frame_free (page->kpage, false);
+    if (lock_held_by_current_thread(&lock_frame))
+      frame_free(page->kpage, true);
+    else
+      frame_free(page->kpage, false);
   }
 
   hash_delete (current_page_hash(), &page->elem_hash);
