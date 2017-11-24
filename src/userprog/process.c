@@ -306,15 +306,11 @@ process_exit (void)
   lock_acquire (&lock_frame);
   lock_acquire (&swap_lock);
 #endif
-  enum intr_level old_level = intr_disable();
-
   struct thread *curr = thread_current ();
+  struct process_sema *process_sema = pid_to_process_sema(curr->tid);
   struct file *executable_file = NULL;
 
   if(check_pid_to_process_sema (curr->tid)){
-    struct process_sema *process_sema
-            = pid_to_process_sema (curr->tid);
-
     sema_up_all (&process_sema->sema);
     //kill_children(curr->tid); //free children's memory
     process_sema->alive = 0;
@@ -329,10 +325,6 @@ process_exit (void)
       close(target->fd);
     }
 
-#ifdef VM
-    page_destroy(&process_sema->page_hash);
-#endif
-
     //if 부모가 죽음, child 혼자서 다 free해야함
     /*
     if(process_sema->parent_alive == 0){
@@ -341,6 +333,13 @@ process_exit (void)
     }
     */
   }
+
+  enum intr_level old_level = intr_disable();
+
+#ifdef VM
+  if (process_sema != NULL)
+    page_destroy(&process_sema->page_hash);
+#endif
 
   uint32_t *pd;
 
