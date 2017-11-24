@@ -28,28 +28,9 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 void process_sema_init (struct process_sema *);
-bool check_pid_to_process_sema (int);
 void set_exit_status (int);
 
 static struct list process_sema_list;
-
-void kill_children (int parent_pid){ //free process' children who is dead
-  struct list_elem *e, *next;
-  struct process_sema *process_sema;
-  for(e=list_begin(&process_sema_list);e!=list_end(&process_sema_list);e=next){
-    next = list_next(e);
-    process_sema = list_entry(e, struct process_sema, elem);
-    if(process_sema->parent_pid == parent_pid){
-      if(process_sema->alive == 0){
-        list_remove(&(process_sema->elem));
-        free(process_sema);
-      }
-      else{
-        process_sema->parent_alive = 0;
-      }
-    }
-  }
-}
 
 void process_sema_list_init() {
   list_init(&process_sema_list);
@@ -70,24 +51,13 @@ void process_sema_init (struct process_sema *process_sema){
 }
 
 void set_exit_status (int status){
-  if (!check_pid_to_process_sema (thread_current()->tid))
-    return;
   struct process_sema *process_sema
           = current_process_sema();
   
-  process_sema->exit_status = status;
-}
+  if (process_sema == NULL)
+    return;
 
-bool
-check_pid_to_process_sema (int pid){
-  struct list_elem *e;
-  
-  for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
-    if(list_entry(e, struct process_sema, elem)->pid == pid){
-      return true;
-    }
-  }
-  return false;
+  process_sema->exit_status = status;
 }
 
 struct process_sema*
@@ -180,8 +150,8 @@ process_execute (const char *file_name)
 
   if(tid == TID_ERROR) { exit(-1); }
 
-  struct process_sema *process_sema;
-  if (!check_pid_to_process_sema(tid)){ //부모가 자식보다 먼저 schedule되는 case
+  struct process_sema *process_sema = pid_to_process_sema(tid);
+  if (process_sema == NULL){ //부모가 자식보다 먼저 schedule되는 case
     process_sema = malloc (sizeof(struct process_sema));
     process_sema_init (process_sema);
   
@@ -190,8 +160,6 @@ process_execute (const char *file_name)
     list_push_back (&process_sema_list, &process_sema->elem);
   }
   else{//자식이 부모보다 먼저
-    process_sema = pid_to_process_sema(tid);
-
     if(process_sema->load_success == -1){
       return -1;
     }
@@ -218,9 +186,9 @@ start_process (void *f_name)
   struct intr_frame if_;
   bool success;
 
-  struct process_sema *process_sema;
   int pid = thread_current()->tid;
-  if (!check_pid_to_process_sema(pid)){ //자식이 부모보다 먼저 schedule되는 case
+  struct process_sema *process_sema = pid_to_process_sema(pid);
+  if (process_sema == NULL){ //자식이 부모보다 먼저 schedule되는 case
     process_sema = malloc (sizeof(struct process_sema));
     process_sema_init (process_sema);
   
@@ -228,7 +196,6 @@ start_process (void *f_name)
     list_push_back (&process_sema_list, &process_sema->elem);
   }
   else{
-    process_sema = pid_to_process_sema (thread_current()->tid);
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -276,12 +243,10 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  if  (!check_pid_to_process_sema (child_tid)){
+  struct process_sema *process_sema = pid_to_process_sema(child_tid);
+  if  (process_sema == NULL){
     return -1;
   }
-
-  struct process_sema *process_sema;
-  process_sema = pid_to_process_sema (child_tid);
 
   if(process_sema->parent_pid != thread_current()->tid){
     return -1;
@@ -309,7 +274,7 @@ process_exit (void)
   struct thread *curr = thread_current ();
   struct process_sema *process_sema = pid_to_process_sema(curr->tid);
 
-  if(check_pid_to_process_sema (curr->tid)){
+  if(process_sema != NULL){
     sema_up_all (&process_sema->sema);
     process_sema->alive = 0;
 
