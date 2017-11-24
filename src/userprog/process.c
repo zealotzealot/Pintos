@@ -334,10 +334,12 @@ process_exit (void)
 #endif
 
     //if 부모가 죽음, child 혼자서 다 free해야함
+    /*
     if(process_sema->parent_alive == 0){
       list_remove(&(process_sema->elem));
       free(process_sema);
     }
+    */
   }
 
   uint32_t *pd;
