@@ -74,7 +74,7 @@ pid_to_process_sema (int pid){
 }
 
 struct process_sema *current_process_sema() {
-  return pid_to_process_sema(thread_current()->tid);
+  return thread_current()->process_sema;
 }
 
 void argument_pass(char *string, void **esp){
