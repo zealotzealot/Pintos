@@ -31,6 +31,7 @@ struct process_sema
 
 #ifdef VM
   struct hash page_hash;
+  struct list mmap_list;
 #endif
 };
 

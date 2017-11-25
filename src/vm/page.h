@@ -3,6 +3,7 @@
 
 #include "lib/kernel/hash.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 
 enum page_type {
   PAGE_FILE,
@@ -31,12 +32,13 @@ struct page {
   // Fields for swap
   int slot;
 
-  // No fileds for mmap
+  // Fileds for mmap
+  struct mte *mte;
 
   struct hash_elem elem_hash;
 };
 
-bool page_add_mmap(struct file *, off_t, uint8_t *, size_t, size_t, bool);
+bool page_add_mmap(struct mte *, off_t, uint8_t *, size_t, size_t, bool);
 void page_free_mmap(void *);
 
 void page_set_pin(void *, unsigned, bool);

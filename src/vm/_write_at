@@ -178,7 +178,8 @@ void page_free_mmap(void *addr){
   if (page->type != PAGE_MMAP)
     ASSERT (0);
 
-  if (page->kpage != NULL && pagedir_is_dirty(thread_current()->pagedir, addr)){
+  if (page->kpage != NULL){
+    printf("mmap write\n");
     if (file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs)
         != (int) page->page_read_bytes)
       ASSERT(0);

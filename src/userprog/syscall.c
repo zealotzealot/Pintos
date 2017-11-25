@@ -264,7 +264,6 @@ int open (const char *file) {
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = res_file;
   target->fd = file_desc_idx;
-  list_init (&target->mmap_list);
   strlcpy(target->name, file, strlen(file)+1);
 
   struct process_sema *process = current_process_sema();
@@ -361,18 +360,6 @@ void close (int fd) {
   if(target == NULL)
     return;
 
-#ifdef VM
-  lock_acquire(&mmap_lock);
-  struct list_elem *e, *next;
-  struct mte *mte;
-  struct list *mmap_list = &(target->mmap_list);
-  for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
-    next = list_next(e);
-    mte = list_entry (e, struct mte, elem_list);
-    munmap (mte->map_id);
-  }
-  lock_release(&mmap_lock);
-#endif
   lock_acquire(&file_lock);
   file_close(target->file);
   lock_release(&file_lock);
@@ -406,8 +393,15 @@ int mmap (int fd, void *addr) {
   lock_acquire(&mmap_lock);
 
   struct file_desc *file_desc = get_file_desc(fd);
-  int page_read_bytes, page_zero_bytes;
 
+  struct mte *mte;
+  mte = (struct mte *) malloc (sizeof(struct mte));
+  mte->map_id = ++mmap_idx;
+  mte->file = file_reopen(file_desc->file);
+  mte->base = addr;
+  mte->length = size;
+
+  int page_read_bytes, page_zero_bytes;
   void *upage;
 
   for (upage=addr; upage<addr+size; upage+=PGSIZE){
@@ -419,7 +413,7 @@ int mmap (int fd, void *addr) {
       page_read_bytes = addr + size - upage;
       page_zero_bytes = PGSIZE - page_read_bytes;
     }
-    if (!page_add_mmap (file_desc->file, upage-addr, upage,
+    if (!page_add_mmap (mte, upage-addr, upage,
         page_read_bytes, page_zero_bytes, true)){
       void *i;
       for (i=addr; i<upage; i+=PGSIZE){
@@ -429,14 +423,7 @@ int mmap (int fd, void *addr) {
     }
   }
 
-  struct mte *mte;
-  mte = (struct mte *) malloc (sizeof(struct mte));
-  mte->map_id = ++mmap_idx;
-  mte->fd = fd;
-  mte->base = addr;
-  mte->length = size;
-  
-  list_push_back (&file_desc->mmap_list, &mte->elem_list);
+  list_push_back (&current_process_sema()->mmap_list, &mte->elem_list);
   hash_insert (&mmap_table, &mte->elem_hash);
 
   lock_release(&mmap_lock);
@@ -470,6 +457,8 @@ void munmap (int map_id) {
   for (upage=mte->base; upage<(mte->base)+(mte->length); upage+=PGSIZE){
     page_free_mmap (upage);
   }
+
+  file_close(mte->file);
 
   list_remove(&mte->elem_list);
   hash_delete (&mmap_table, &mte->elem_hash);
