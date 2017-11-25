@@ -33,8 +33,7 @@ struct page *get_page(struct hash *h, void *addr) {
 
   if (h==NULL){
     h = current_page_hash();
-    if (h==NULL)
-      ASSERT(0);
+    ASSERT(h!=NULL)
   }
   
   struct hash_elem *hash_elem = hash_find(h, &dummy_page.elem_hash);
@@ -116,7 +115,8 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   page->page_zero_bytes = page_zero_bytes;
   page->writable = writable;
 
-  hash_insert(current_page_hash(), &page->elem_hash);
+  struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+  ASSERT(old_hash == NULL);
 #ifdef DEBUG
   printf("page add file out %p %s\n",upage,thread_current()->name);
 #endif
@@ -142,7 +142,8 @@ void page_add_stack(void *addr) {
     page->upage = upage;
     page->kpage = NULL;
     page->writable = true;
-    hash_insert(current_page_hash(), &page->elem_hash);
+    struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+    ASSERT(old_hash == NULL);
   }
 #ifdef DEBUG
   printf("page add stack out %p %s\n",addr,thread_current()->name);
@@ -154,8 +155,7 @@ void page_add_stack(void *addr) {
 bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable){
   if (get_page(NULL, upage) != NULL)
     return false;
-  if (pg_ofs(upage) != 0)
-    ASSERT (0);
+  ASSERT(pg_ofs(upage) == 0)
   struct page *page = malloc(sizeof(struct page));
   page->type = PAGE_MMAP;
   page->pin = false;
@@ -166,7 +166,8 @@ bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_
   page->page_read_bytes = page_read_bytes;
   page->page_zero_bytes = page_zero_bytes;
   page->writable = writable;
-  hash_insert(current_page_hash(), &page->elem_hash);
+  struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+  ASSERT(old_hash == NULL);
   return true;
 }
 
@@ -175,8 +176,7 @@ bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_
 void page_free_mmap(void *addr){
   struct page *page = get_page (NULL, addr);
 
-  if (page->type != PAGE_MMAP)
-    ASSERT (0);
+  ASSERT(page->type == PAGE_MMAP)
 
   if (page->kpage != NULL && pagedir_is_dirty(thread_current()->pagedir, addr)){
     if (file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs)

@@ -64,8 +64,7 @@ struct frame_table_entry *choose_frame_evict() {
     fte = list_entry (e, struct frame_table_entry, elem_list);
 
     page_hash = &(((fte->thread)->process_sema)->page_hash);
-    if(page_hash == NULL)
-      ASSERT (false);
+    ASSERT(page_hash != NULL)
 
     page = get_page (page_hash, fte->upage);
     if(page->type == PAGE_LOADED && page->pin == false)
@@ -105,7 +104,8 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte->thread = thread_current();
   
   list_push_back (&LRU_list, &fte->elem_list);
-  hash_replace (&frame_table, &fte->elem_hash);
+  struct hash_elem *old_hash = hash_replace (&frame_table, &fte->elem_hash);
+  ASSERT(old_hash == NULL);
 
 #ifdef DEBUG
   printf("frame_allocate kpage %p\n",fte->kpage);
@@ -133,8 +133,7 @@ void frame_free (void *kpage, bool locked){
 
   struct frame_table_entry *fte = get_frame(kpage);
 
-  if(fte == NULL)
-    ASSERT (false);
+  ASSERT(fte != NULL)
 
   list_remove (&fte->elem_list);
   hash_delete (&frame_table, &fte->elem_hash);
