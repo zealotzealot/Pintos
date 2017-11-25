@@ -104,7 +104,8 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte->thread = thread_current();
   
   list_push_back (&LRU_list, &fte->elem_list);
-  hash_replace (&frame_table, &fte->elem_hash);
+  struct hash_elem *old_hash = hash_replace (&frame_table, &fte->elem_hash);
+  ASSERT(old_hash == NULL);
 
 #ifdef DEBUG
   printf("frame_allocate kpage %p\n",fte->kpage);

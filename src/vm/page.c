@@ -115,7 +115,8 @@ void page_add_file(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   page->page_zero_bytes = page_zero_bytes;
   page->writable = writable;
 
-  hash_insert(current_page_hash(), &page->elem_hash);
+  struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+  ASSERT(old_hash == NULL);
 #ifdef DEBUG
   printf("page add file out %p %s\n",upage,thread_current()->name);
 #endif
@@ -141,7 +142,8 @@ void page_add_stack(void *addr) {
     page->upage = upage;
     page->kpage = NULL;
     page->writable = true;
-    hash_insert(current_page_hash(), &page->elem_hash);
+    struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+    ASSERT(old_hash == NULL);
   }
 #ifdef DEBUG
   printf("page add stack out %p %s\n",addr,thread_current()->name);
@@ -164,7 +166,8 @@ bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_
   page->page_read_bytes = page_read_bytes;
   page->page_zero_bytes = page_zero_bytes;
   page->writable = writable;
-  hash_insert(current_page_hash(), &page->elem_hash);
+  struct hash_elem *old_hash = hash_insert(current_page_hash(), &page->elem_hash);
+  ASSERT(old_hash == NULL);
   return true;
 }
 
