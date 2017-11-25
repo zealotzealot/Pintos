@@ -56,8 +56,7 @@ void swap_out() {
   lock_acquire(&swap_lock);
   
   struct frame_table_entry *fte_evicted = choose_frame_evict();
-  if(fte_evicted == NULL)
-    ASSERT(0);
+  ASSERT(fte_evicted != NULL)
 
   void *kpage = fte_evicted->kpage;
   
@@ -71,8 +70,7 @@ void swap_out() {
 #endif
 
   struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
-  if(page_hash == NULL)
-    ASSERT(false);
+  ASSERT(page_hash != NULL)
 
   page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
  
