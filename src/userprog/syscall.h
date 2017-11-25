@@ -16,9 +16,6 @@ struct file_desc {
   char name[32];
   int fd;
   struct list_elem elem;
-
-  //for mmap
-  struct list mmap_list;
 };
 
 struct mte {

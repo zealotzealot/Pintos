@@ -46,6 +46,7 @@ void process_sema_init (struct process_sema *process_sema){
   list_init(&process_sema->file_desc_list);
 #ifdef VM
   page_init(&process_sema->page_hash);
+  list_init(&process_sema->mmap_list);
 #endif
   thread_current()->process_sema = process_sema;
 }

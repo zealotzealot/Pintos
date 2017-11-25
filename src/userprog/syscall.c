@@ -264,7 +264,6 @@ int open (const char *file) {
   struct file_desc *target = malloc(sizeof(struct file_desc));
   target->file = res_file;
   target->fd = file_desc_idx;
-  list_init (&target->mmap_list);
   strlcpy(target->name, file, strlen(file)+1);
 
   struct process_sema *process = current_process_sema();
@@ -365,7 +364,7 @@ void close (int fd) {
   lock_acquire(&mmap_lock);
   struct list_elem *e, *next;
   struct mte *mte;
-  struct list *mmap_list = &(target->mmap_list);
+  struct list *mmap_list = &(current_process_sema()->mmap_list);
   for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
     next = list_next(e);
     mte = list_entry (e, struct mte, elem_list);
@@ -436,7 +435,7 @@ int mmap (int fd, void *addr) {
   mte->base = addr;
   mte->length = size;
   
-  list_push_back (&file_desc->mmap_list, &mte->elem_list);
+  list_push_back (&current_process_sema()->mmap_list, &mte->elem_list);
   hash_insert (&mmap_table, &mte->elem_hash);
 
   lock_release(&mmap_lock);
