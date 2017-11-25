@@ -62,6 +62,14 @@ void swap_out() {
   
   int slot_start,i;
   slot_start = bitmap_scan_and_flip(swap_bitmap, 0, 8, false);
+
+  struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
+  ASSERT(page_hash != NULL)
+
+  page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
+
+  pagedir_clear_page(fte_evicted->thread->pagedir, fte_evicted->upage);
+
   for(i=0; i<8; i++){
     disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
   }
@@ -69,11 +77,6 @@ void swap_out() {
   printf("swap out %p, %d\n",kpage, slot_start);
 #endif
 
-  struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
-  ASSERT(page_hash != NULL)
-
-  page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
- 
   frame_free(kpage, true);
 
  lock_release(&swap_lock);
