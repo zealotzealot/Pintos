@@ -287,6 +287,14 @@ process_exit (void)
       target = list_entry(e, struct file_desc, elem);
       close(target->fd);
     }
+
+    struct mte *mte;
+    struct list *mmap_list = &(process_sema->mmap_list);
+    for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
+      next = list_next(e);
+      mte = list_entry (e, struct mte, elem_list);
+      munmap (mte->map_id);
+    }
   }
 
   enum intr_level old_level = intr_disable();

@@ -360,18 +360,6 @@ void close (int fd) {
   if(target == NULL)
     return;
 
-#ifdef VM
-  lock_acquire(&mmap_lock);
-  struct list_elem *e, *next;
-  struct mte *mte;
-  struct list *mmap_list = &(current_process_sema()->mmap_list);
-  for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
-    next = list_next(e);
-    mte = list_entry (e, struct mte, elem_list);
-    munmap (mte->map_id);
-  }
-  lock_release(&mmap_lock);
-#endif
   lock_acquire(&file_lock);
   file_close(target->file);
   lock_release(&file_lock);

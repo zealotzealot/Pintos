@@ -159,7 +159,7 @@ bool page_add_mmap(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   struct page *page = malloc(sizeof(struct page));
   page->type = PAGE_MMAP;
   page->pin = false;
-  page->file = file;
+  page->file = file_reopen(file);
   page->ofs = ofs;
   page->upage = upage;
   page->kpage = NULL;
