@@ -151,7 +151,7 @@ void page_add_stack(void *addr) {
 
 
 
-bool page_add_mmap(struct file *file, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable){
+bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_bytes, size_t page_zero_bytes, bool writable){
   if (get_page(NULL, upage) != NULL)
     return false;
   if (pg_ofs(upage) != 0)
@@ -159,7 +159,7 @@ bool page_add_mmap(struct file *file, off_t ofs, uint8_t *upage, size_t page_rea
   struct page *page = malloc(sizeof(struct page));
   page->type = PAGE_MMAP;
   page->pin = false;
-  page->file = file_reopen(file);
+  page->mte = mte;
   page->ofs = ofs;
   page->upage = upage;
   page->kpage = NULL;
@@ -179,7 +179,7 @@ void page_free_mmap(void *addr){
     ASSERT (0);
 
   if (page->kpage != NULL){
-    if (file_write_at (page->file, page->kpage, page->page_read_bytes, page->ofs)
+    if (file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs)
         != (int) page->page_read_bytes)
       ASSERT(0);
     if (lock_held_by_current_thread(&lock_frame))
@@ -295,7 +295,7 @@ bool page_load_mmap(struct page *page) {
   uint8_t *kpage = frame_allocate(page->upage, page->writable, PAL_USER);
   page->kpage = kpage;
   
-  if (file_read_at (page->file, kpage, page->page_read_bytes, page->ofs)
+  if (file_read_at (page->mte->file, kpage, page->page_read_bytes, page->ofs)
       != (int) page->page_read_bytes)
     ASSERT(0);
 

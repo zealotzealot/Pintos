@@ -20,7 +20,7 @@ struct file_desc {
 
 struct mte {
   int map_id;
-  int fd;
+  struct file *file;
   void *base;
   int length;
   struct list_elem elem_list;
