@@ -292,7 +292,7 @@ process_exit (void)
     struct list *mmap_list = &(process_sema->mmap_list);
     for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
       next = list_next(e);
-      mte = list_entry (e, struct mte, elem_list);
+      mte = list_entry (e, struct mte, elem);
       munmap (mte->map_id);
     }
   }

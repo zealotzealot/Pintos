@@ -27,8 +27,6 @@ int write(int, const void *, unsigned);
 void seek(int, unsigned);
 unsigned tell(int);
 void close(int);
-unsigned mmap_hash_func(const struct hash_elem *, void *);
-bool mmap_less_func(const struct hash_elem *, const struct hash_elem *, void * UNUSED);
 int mmap(int, void *);
 void munmap(int);
 
@@ -36,11 +34,6 @@ int file_desc_idx=2;
 int mmap_idx=1;
 struct lock fork_lock;
 struct lock file_lock;
-#ifdef VM
-struct lock mmap_lock;
-struct hash mmap_table;
-#endif
-
 
 
 //Read a byte at user virtual address UADDR
@@ -123,10 +116,6 @@ syscall_init (void)
 {
   lock_init(&fork_lock);
   lock_init(&file_lock);
-#ifdef VM
-  lock_init(&mmap_lock);
-  hash_init(&mmap_table, mmap_hash_func, mmap_less_func, NULL);
-#endif
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -369,18 +358,6 @@ void close (int fd) {
 
 
 #ifdef VM
-unsigned
-mmap_hash_func (const struct hash_elem *p_, void *aux UNUSED){
-  const struct mte *p = hash_entry (p_, struct mte, elem_hash);
-  return hash_bytes (&p->map_id, sizeof p->map_id);
-}
-
-bool
-mmap_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){
-  return hash_entry(a, struct mte, elem_hash)->map_id
-          < hash_entry(b, struct mte, elem_hash)->map_id;
-}
-
 int mmap (int fd, void *addr) {
 
   if (fd <= 1 || addr == 0 || pg_ofs(addr) != 0)
@@ -390,7 +367,6 @@ int mmap (int fd, void *addr) {
   if (size == 0)
     return -1;
 
-  lock_acquire(&mmap_lock);
 
   struct file_desc *file_desc = get_file_desc(fd);
 
@@ -423,34 +399,24 @@ int mmap (int fd, void *addr) {
     }
   }
 
-  list_push_back (&current_process_sema()->mmap_list, &mte->elem_list);
-  hash_insert (&mmap_table, &mte->elem_hash);
+  list_push_back (&current_process_sema()->mmap_list, &mte->elem);
 
-  lock_release(&mmap_lock);
   return mmap_idx;
 }
 
 
 
 void munmap (int map_id) {
-  struct mte dummy_mte;
-  dummy_mte.map_id = map_id;
+  struct mte *mte;
+  struct list_elem *e;
+  struct list *mmap_list = &current_process_sema()->mmap_list;
 
-  bool lock_set = false;
-  if(lock_held_by_current_thread(&mmap_lock))
-    lock_set = true;
-  
-  if(lock_set == false)
-    lock_acquire (&mmap_lock);
-  
-  struct hash_elem *hash_elem = hash_find (&mmap_table, &dummy_mte.elem_hash);
-  if (hash_elem == NULL){
-    if(lock_set == false)
-      lock_release (&mmap_lock);
-    return;
+  for(e=list_begin(mmap_list); e!=list_end(mmap_list); e=list_next(e)){
+    mte = list_entry(e, struct mte, elem);
+    if(mte->map_id == map_id)
+      break;
   }
-
-  struct mte *mte = hash_entry (hash_elem, struct mte, elem_hash);
+  ASSERT (mte->map_id == map_id);
 
   void *upage;
 
@@ -460,11 +426,8 @@ void munmap (int map_id) {
 
   file_close(mte->file);
 
-  list_remove(&mte->elem_list);
-  hash_delete (&mmap_table, &mte->elem_hash);
+  list_remove(&mte->elem);
   free (mte);
   
-  if(lock_set == false)
-    lock_release (&mmap_lock);
 }
 #endif

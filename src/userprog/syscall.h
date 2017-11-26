@@ -23,8 +23,7 @@ struct mte {
   struct file *file;
   void *base;
   int length;
-  struct list_elem elem_list;
-  struct hash_elem elem_hash;
+  struct list_elem elem;
 };
 
 #endif /* userprog/syscall.h */
