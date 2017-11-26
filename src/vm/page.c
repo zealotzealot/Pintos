@@ -178,10 +178,12 @@ void page_free_mmap(void *addr){
 
   ASSERT(page->type == PAGE_MMAP)
 
-  if (page->kpage != NULL && pagedir_is_dirty(thread_current()->pagedir, addr)){
-    if (file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs)
-        != (int) page->page_read_bytes)
-      ASSERT(0);
+  if (page->kpage != NULL) {
+    if (pagedir_is_dirty(thread_current()->pagedir, addr)){
+      int read_bytes = file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs);
+      ASSERT(read_bytes == (int) page->page_read_bytes);
+    }
+
     if (lock_held_by_current_thread(&lock_frame))
       frame_free(page->kpage, true);
     else
