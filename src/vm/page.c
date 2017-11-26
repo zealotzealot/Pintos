@@ -171,7 +171,17 @@ bool page_add_mmap(struct mte *mte, off_t ofs, uint8_t *upage, size_t page_read_
   return true;
 }
 
+void page_write_mmap(void *addr){
 
+  struct page *page = get_page (NULL, addr);
+
+  ASSERT(page->kpage != NULL);
+  
+  if (pagedir_is_dirty(thread_current()->pagedir, addr)){
+      int read_bytes = file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs);
+      ASSERT(read_bytes == (int) page->page_read_bytes);
+  }
+}
 
 void page_free_mmap(void *addr){
   struct page *page = get_page (NULL, addr);
@@ -179,10 +189,7 @@ void page_free_mmap(void *addr){
   ASSERT(page->type == PAGE_MMAP)
 
   if (page->kpage != NULL) {
-    if (pagedir_is_dirty(thread_current()->pagedir, addr)){
-      int read_bytes = file_write_at (page->mte->file, page->kpage, page->page_read_bytes, page->ofs);
-      ASSERT(read_bytes == (int) page->page_read_bytes);
-    }
+    page_write_mmap (addr);
 
     if (lock_held_by_current_thread(&lock_frame))
       frame_free(page->kpage, true);
@@ -196,11 +203,16 @@ void page_free_mmap(void *addr){
 
 
 
-void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_t pid) {
+bool page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_t pid) {
 #ifdef DEBUG
   printf("page add swap in %p %s\n",upage,thread_current()->name);
 #endif
   struct page *page = get_page (h, upage);
+
+  if (page->type == PAGE_MMAP){
+    return false;
+  }
+
   page->type = PAGE_SWAP;
   page->kpage = NULL;
   page->writable = writable;
@@ -209,6 +221,8 @@ void page_change_swap(struct hash *h, void *upage, int slot, bool writable, pid_
 #ifdef DEBUG
   printf("page add swap out %p %s\n",upage,thread_current()->name);
 #endif
+
+  return true;
 }
 
 

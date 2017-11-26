@@ -66,13 +66,18 @@ void swap_out() {
   struct hash *page_hash = &(((fte_evicted->thread)->process_sema)->page_hash);
   ASSERT(page_hash != NULL)
 
-  page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
+  bool result = page_change_swap(page_hash,fte_evicted->upage, slot_start, fte_evicted->writable, fte_evicted->thread->tid);
 
   pagedir_clear_page(fte_evicted->thread->pagedir, fte_evicted->upage);
 
-  for(i=0; i<8; i++){
-    disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
+  if (result == true){
+    for(i=0; i<8; i++){
+      disk_write(swap_disk, slot_start+i, kpage+i*DISK_SECTOR_SIZE);
+    }
   }
+  else
+    page_write_mmap(fte_evicted->upage);
+
 #ifdef DEBUG
   printf("swap out %p, %d\n",kpage, slot_start);
 #endif
