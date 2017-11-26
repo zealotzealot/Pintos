@@ -67,7 +67,7 @@ struct frame_table_entry *choose_frame_evict() {
     ASSERT(page_hash != NULL)
 
     page = get_page (page_hash, fte->upage);
-    if(page->type == PAGE_LOADED && page->pin == false)
+    if(page->type == PAGE_LOADED || page->type == PAGE_MMAP)
       return fte;
   }
   ASSERT (false);

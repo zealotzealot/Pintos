@@ -39,6 +39,7 @@ struct page {
 };
 
 bool page_add_mmap(struct mte *, off_t, uint8_t *, size_t, size_t, bool);
+void page_write_mmap(void *);
 void page_free_mmap(void *);
 
 void page_set_pin(void *, unsigned, bool);
@@ -48,7 +49,7 @@ void page_destroy(struct hash *);
 
 void page_add_file(struct file *, off_t, uint8_t *, size_t, size_t, bool);
 void page_add_stack(void *);
-void page_change_swap(struct hash *, void *, int, bool, pid_t);
+bool page_change_swap(struct hash *, void *, int, bool, pid_t);
 bool page_load(void *);
 
 #endif
