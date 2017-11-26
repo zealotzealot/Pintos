@@ -9,7 +9,7 @@
 #include "vm/page.h"
 #include "vm/swap.h"
 
-struct list LRU_list;
+struct list FIFO_list;
 struct hash frame_table;
 
 unsigned frame_hash_func (const struct hash_elem *, void *);
@@ -50,7 +50,7 @@ struct frame_table_entry *get_frame(void *kpage) {
 
 void frame_init(){
   lock_init (&lock_frame);
-  list_init (&LRU_list);
+  list_init (&FIFO_list);
   hash_init (&frame_table, frame_hash_func, frame_less_func, NULL);
 }
 
@@ -60,7 +60,7 @@ struct frame_table_entry *choose_frame_evict() {
   struct hash *page_hash;
   struct page *page;
 
-  for (e=list_begin(&LRU_list); e!=list_end(&LRU_list); e=list_next(e)){
+  for (e=list_begin(&FIFO_list); e!=list_end(&FIFO_list); e=list_next(e)){
     fte = list_entry (e, struct frame_table_entry, elem_list);
 
     page_hash = &(((fte->thread)->process_sema)->page_hash);
@@ -97,7 +97,7 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   fte->writable = writable;
   fte->thread = thread_current();
   
-  list_push_back (&LRU_list, &fte->elem_list);
+  list_push_back (&FIFO_list, &fte->elem_list);
   struct hash_elem *old_hash = hash_replace (&frame_table, &fte->elem_hash);
   ASSERT(old_hash == NULL);
 
