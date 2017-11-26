@@ -84,17 +84,11 @@ uint8_t *frame_allocate (void *upage, bool writable, enum palloc_flags flags){
   if (kpage == NULL) {
     swap_out();
     kpage = palloc_get_page(flags);
-    if (kpage == NULL) {
-      lock_release (&lock_frame);
-      return NULL;
-    }
+    ASSERT(kpage != NULL);
   }
   
-  if (!install_page(upage, kpage, writable)) {
-    palloc_free_page(kpage);
-    lock_release (&lock_frame);
-    return NULL;
-  }
+  bool install_success = install_page(upage, kpage, writable);
+  ASSERT(install_success);
   
   struct frame_table_entry *fte;
   fte = (struct frame_table_entry *) malloc (sizeof(struct frame_table_entry));
