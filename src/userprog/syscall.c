@@ -12,6 +12,7 @@
 #include "vm/page.h"
 #endif
 
+#define READDIR_MAX_LEN 14
 
 struct file_desc * get_file_desc(int);
 static void syscall_handler (struct intr_frame *);
@@ -29,6 +30,11 @@ unsigned tell(int);
 void close(int);
 int mmap(int, void *);
 void munmap(int);
+bool chdir (char *);
+bool mkdir (char *);
+bool readdir (int, char *);
+bool isdir (int);
+int inumber (int);
 
 int file_desc_idx=2;
 int mmap_idx=1;
@@ -184,6 +190,22 @@ syscall_handler (struct intr_frame *f UNUSED)
       munmap (get_user ((int *)(f->esp)+1));
       break;
 #endif
+    case SYS_CHDIR:
+      f->eax = chdir (get_user ((int *)(f->esp)+1));
+      break;
+    case SYS_MKDIR:
+      f->eax = mkdir (get_user ((int *)(f->esp)+1));
+      break;
+    case SYS_READDIR:
+      f->eax = readdir (get_user ((int *)(f->esp)+1),
+                        get_user ((int *)(f->esp)+2));
+      break;
+    case SYS_ISDIR:
+      f->eax = isdir (get_user ((int *)(f->esp)+1));
+      break;
+    case SYS_INUMBER:
+      f->eax = inumber (get_user ((int *)(f->esp)+1));
+      break;
   }
 }
 
@@ -430,4 +452,34 @@ void munmap (int map_id) {
   free (mte);
   
 }
+
 #endif
+
+
+bool chdir (char *dir) {
+
+}
+
+
+
+bool mkdir (char *dir) {
+
+}
+
+
+
+bool readdir (int fd, char name[READDIR_MAX_LEN + 1]){
+
+}
+
+
+
+bool isdir (int fd) {
+
+}
+
+
+
+int inumber (int fd) {
+
+}
