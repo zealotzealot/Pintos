@@ -33,6 +33,7 @@
 #include "devices/disk.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
+#include "filesys/cache.h"
 #endif
 #ifdef VM
 #include "vm/frame.h"
@@ -119,6 +120,7 @@ main (void)
 
 #ifdef FILESYS
   /* Initialize file system. */
+  cache_init();
   disk_init ();
   filesys_init (format_filesys);
 #endif
