@@ -289,12 +289,14 @@ process_exit (void)
     }
 
     struct mte *mte;
+#ifdef VM
     struct list *mmap_list = &(process_sema->mmap_list);
     for (e=list_begin(mmap_list); e!=list_end(mmap_list); e=next){
       next = list_next(e);
       mte = list_entry (e, struct mte, elem);
       munmap (mte->map_id);
     }
+#endif
   }
 
   enum intr_level old_level = intr_disable();
