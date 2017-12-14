@@ -133,20 +133,14 @@ inode_create (disk_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
 
+      success = true;
+
       // Build direct blocks
       size_t direct_block_count = sectors<DIRECT_BLOCK_NUM ? sectors : DIRECT_BLOCK_NUM;
       for (i=0; i<direct_block_count; i++) {
-        if (free_map_allocate (1, &(disk_inode->direct_blocks[i]))) {
+        success &= free_map_allocate (1, &(disk_inode->direct_blocks[i]));
+        if (success)
           cache_write (filesys_disk, disk_inode->direct_blocks[i], zeros);
-        }
-        else {
-          break;
-        }
-      }
-
-      success = (i == direct_block_count);
-      if (!success) {
-        // TODO: Cancel allocated resources
       }
 
       // Build indirect blocks
@@ -154,18 +148,16 @@ inode_create (disk_sector_t sector, off_t length)
         size_t indirect_block_count = sectors-DIRECT_BLOCK_NUM;
         if (indirect_block_count > 128)
           indirect_block_count = 128;
-        free_map_allocate(1, &(disk_inode->indirect_block));
         disk_indirect = calloc(1, sizeof *disk_indirect);
         memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
         for (i=0; i<indirect_block_count; i++) {
-          free_map_allocate(1, &(disk_indirect->sectors[i]));
-          cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
+          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
+          if (success)
+            cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
         }
-      }
-
-      // Save and free indirect block
-      if (disk_indirect != NULL) {
-        cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
+        success &= free_map_allocate(1, &(disk_inode->indirect_block));
+        if (success)
+          cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
         free(disk_indirect);
       }
 
@@ -173,21 +165,24 @@ inode_create (disk_sector_t sector, off_t length)
         size_t doubly_indirect_block_count = sectors-DIRECT_BLOCK_NUM-128;
         if (doubly_indirect_block_count > 128*128)
           doubly_indirect_block_count = 128*128;
-        free_map_allocate(1, &(disk_inode->doubly_indirect_block));
         disk_indirect = calloc(1, sizeof *disk_indirect);
         memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
         for (i=0; i*128+j<doubly_indirect_block_count; i++) {
-          free_map_allocate(1, &(disk_indirect->sectors[i]));
           disk_doubly_indirect = calloc(1, sizeof *disk_doubly_indirect);
           memcpy(disk_doubly_indirect, zeros, DISK_SECTOR_SIZE);
           for (j=0; i*128+j<doubly_indirect_block_count && j<128; j++) {
-            free_map_allocate(1, &(disk_doubly_indirect->sectors[j]));
-            cache_write(filesys_disk, disk_doubly_indirect->sectors[j], zeros);
+            success &= free_map_allocate(1, &(disk_doubly_indirect->sectors[j]));
+            if (success)
+              cache_write(filesys_disk, disk_doubly_indirect->sectors[j], zeros);
           }
-          cache_write(filesys_disk, disk_indirect->sectors[i], disk_doubly_indirect);
+          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
+          if (success)
+            cache_write(filesys_disk, disk_indirect->sectors[i], disk_doubly_indirect);
           free(disk_doubly_indirect);
         }
-        cache_write(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
+        success &= free_map_allocate(1, &(disk_inode->doubly_indirect_block));
+        if (success)
+          cache_write(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
         free(disk_indirect);
       }
 
