@@ -11,15 +11,23 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
+#define DIRECT_BLOCK_NUM 124
+
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    disk_sector_t start;                /* First data sector. */
+    disk_sector_t direct_blocks[DIRECT_BLOCK_NUM];
+    disk_sector_t indirect_block;
+    disk_sector_t doubly_indirect_block;
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
   };
+
+struct indirect_disk {
+  disk_sector_t sectors[128];
+};
+
 
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
@@ -48,10 +56,42 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / DISK_SECTOR_SIZE;
-  else
+
+  if (pos >= inode->data.length)
     return -1;
+
+  struct inode_disk *disk_inode = &inode->data;
+  int idx = pos / DISK_SECTOR_SIZE;
+
+  // Direct block
+  if (idx < DIRECT_BLOCK_NUM) {
+    return disk_inode->direct_blocks[idx];
+  }
+  // Indirect block
+  else if (idx < DIRECT_BLOCK_NUM + 128) {
+    idx -= DIRECT_BLOCK_NUM;
+    struct indirect_disk *disk_indirect = calloc(1, sizeof *disk_indirect);
+    cache_read(filesys_disk, disk_inode->indirect_block, disk_indirect);
+    disk_sector_t result = disk_indirect->sectors[idx];
+    free(disk_indirect);
+    return result;
+  }
+  // Doubly indirect block
+  else if (idx < DIRECT_BLOCK_NUM + 128 + 128*128) {
+    idx -= DIRECT_BLOCK_NUM + 128;
+    struct indirect_disk *disk_indirect = calloc(1, sizeof *disk_indirect);
+    cache_read(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
+    struct indirect_disk *disk_doubly_indirect = calloc(1, sizeof *disk_indirect);
+    cache_read(filesys_disk, disk_indirect->sectors[idx/128], disk_doubly_indirect);
+    disk_sector_t result = disk_doubly_indirect->sectors[idx%128];
+    free(disk_indirect);
+    free(disk_doubly_indirect);
+    return result;
+  }
+  // File size over upper bound
+  else {
+    return -1;
+  }
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -74,7 +114,11 @@ bool
 inode_create (disk_sector_t sector, off_t length)
 {
   struct inode_disk *disk_inode = NULL;
+  struct indirect_disk *disk_indirect = NULL;
+  struct indirect_disk *disk_doubly_indirect = NULL;
   bool success = false;
+  size_t i, j;
+  static char zeros[DISK_SECTOR_SIZE];
 
   ASSERT (length >= 0);
 
@@ -88,19 +132,62 @@ inode_create (disk_sector_t sector, off_t length)
       size_t sectors = bytes_to_sectors (length);
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start))
-        {
-          cache_write (filesys_disk, sector, disk_inode);
-          if (sectors > 0) 
-            {
-              static char zeros[DISK_SECTOR_SIZE];
-              size_t i;
-              
-              for (i = 0; i < sectors; i++) 
-                cache_write (filesys_disk, disk_inode->start + i, zeros); 
-            }
-          success = true; 
-        } 
+
+      success = true;
+
+      // Build direct blocks
+      size_t direct_block_count = sectors<DIRECT_BLOCK_NUM ? sectors : DIRECT_BLOCK_NUM;
+      for (i=0; i<direct_block_count; i++) {
+        success &= free_map_allocate (1, &(disk_inode->direct_blocks[i]));
+        if (success)
+          cache_write (filesys_disk, disk_inode->direct_blocks[i], zeros);
+      }
+
+      // Build indirect blocks
+      if (sectors > DIRECT_BLOCK_NUM) {
+        size_t indirect_block_count = sectors-DIRECT_BLOCK_NUM;
+        if (indirect_block_count > 128)
+          indirect_block_count = 128;
+        disk_indirect = calloc(1, sizeof *disk_indirect);
+        memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
+        for (i=0; i<indirect_block_count; i++) {
+          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
+          if (success)
+            cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
+        }
+        success &= free_map_allocate(1, &(disk_inode->indirect_block));
+        if (success)
+          cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
+        free(disk_indirect);
+      }
+
+      if (sectors > DIRECT_BLOCK_NUM + 128) {
+        size_t doubly_indirect_block_count = sectors-DIRECT_BLOCK_NUM-128;
+        if (doubly_indirect_block_count > 128*128)
+          doubly_indirect_block_count = 128*128;
+        disk_indirect = calloc(1, sizeof *disk_indirect);
+        memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
+        for (i=0; i*128+j<doubly_indirect_block_count; i++) {
+          disk_doubly_indirect = calloc(1, sizeof *disk_doubly_indirect);
+          memcpy(disk_doubly_indirect, zeros, DISK_SECTOR_SIZE);
+          for (j=0; i*128+j<doubly_indirect_block_count && j<128; j++) {
+            success &= free_map_allocate(1, &(disk_doubly_indirect->sectors[j]));
+            if (success)
+              cache_write(filesys_disk, disk_doubly_indirect->sectors[j], zeros);
+          }
+          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
+          if (success)
+            cache_write(filesys_disk, disk_indirect->sectors[i], disk_doubly_indirect);
+          free(disk_doubly_indirect);
+        }
+        success &= free_map_allocate(1, &(disk_inode->doubly_indirect_block));
+        if (success)
+          cache_write(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
+        free(disk_indirect);
+      }
+
+      // Save and free inode
+      cache_write(filesys_disk, sector, disk_inode);
       free (disk_inode);
     }
   return success;
@@ -178,8 +265,9 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
+          size_t i;
+          for (i=0; i<bytes_to_sectors(inode->data.length); i++)
+            free_map_release(byte_to_sector(inode, i*DISK_SECTOR_SIZE), 1);
         }
 
       free (inode); 
