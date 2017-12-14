@@ -55,12 +55,26 @@ static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length) {
-    struct inode_disk *disk_inode = &inode->data;
-    return disk_inode->direct_blocks[pos / DISK_SECTOR_SIZE];
-  }
-  else
+
+  if (pos >= inode->data.length)
     return -1;
+
+  struct inode_disk *disk_inode = &inode->data;
+  int idx = pos / DISK_SECTOR_SIZE;
+
+  // Direct block
+  if (idx < DIRECT_BLOCK_NUM) {
+    return disk_inode->direct_blocks[idx];
+  }
+  // Indirect block
+  else {
+    idx -= DIRECT_BLOCK_NUM;
+    struct indirect_disk *disk_indirect = calloc(1, sizeof *disk_indirect);
+    cache_read(filesys_disk, disk_inode->indirect_block, disk_indirect);
+    disk_sector_t result = disk_indirect->sectors[idx];
+    free(disk_indirect);
+    return result;
+  }
 }
 
 /* List of open inodes, so that opening a single inode twice
