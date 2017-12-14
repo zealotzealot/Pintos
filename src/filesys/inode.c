@@ -386,6 +386,17 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (inode->deny_write_cnt)
     return 0;
 
+  if (inode->data.length < offset+size) {
+    size_t i;
+    for (i = bytes_to_sectors(inode->data.length);
+         i < bytes_to_sectors(offset+size);
+         i++) {
+      disk_inode_build(&inode->data, i);
+    }
+    inode->data.length = offset+size;
+    cache_write(filesys_disk, inode->sector, &inode->data);
+  }
+
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
