@@ -48,6 +48,10 @@ struct inode
     struct inode_disk data;             /* Inode content. */
   };
 
+
+bool disk_inode_build(struct inode_disk *, disk_sector_t);
+
+
 /* Returns the disk sector that contains byte offset POS within
    INODE.
    Returns -1 if INODE does not contain data for a byte at offset
@@ -114,11 +118,7 @@ bool
 inode_create (disk_sector_t sector, off_t length)
 {
   struct inode_disk *disk_inode = NULL;
-  struct indirect_disk *disk_indirect = NULL;
-  struct indirect_disk *disk_doubly_indirect = NULL;
   bool success = false;
-  size_t i, j;
-  static char zeros[DISK_SECTOR_SIZE];
 
   ASSERT (length >= 0);
 
@@ -135,56 +135,9 @@ inode_create (disk_sector_t sector, off_t length)
 
       success = true;
 
-      // Build direct blocks
-      size_t direct_block_count = sectors<DIRECT_BLOCK_NUM ? sectors : DIRECT_BLOCK_NUM;
-      for (i=0; i<direct_block_count; i++) {
-        success &= free_map_allocate (1, &(disk_inode->direct_blocks[i]));
-        if (success)
-          cache_write (filesys_disk, disk_inode->direct_blocks[i], zeros);
-      }
-
-      // Build indirect blocks
-      if (sectors > DIRECT_BLOCK_NUM) {
-        size_t indirect_block_count = sectors-DIRECT_BLOCK_NUM;
-        if (indirect_block_count > 128)
-          indirect_block_count = 128;
-        disk_indirect = calloc(1, sizeof *disk_indirect);
-        memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
-        for (i=0; i<indirect_block_count; i++) {
-          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
-          if (success)
-            cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
-        }
-        success &= free_map_allocate(1, &(disk_inode->indirect_block));
-        if (success)
-          cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
-        free(disk_indirect);
-      }
-
-      if (sectors > DIRECT_BLOCK_NUM + 128) {
-        size_t doubly_indirect_block_count = sectors-DIRECT_BLOCK_NUM-128;
-        if (doubly_indirect_block_count > 128*128)
-          doubly_indirect_block_count = 128*128;
-        disk_indirect = calloc(1, sizeof *disk_indirect);
-        memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
-        for (i=0; i*128+j<doubly_indirect_block_count; i++) {
-          disk_doubly_indirect = calloc(1, sizeof *disk_doubly_indirect);
-          memcpy(disk_doubly_indirect, zeros, DISK_SECTOR_SIZE);
-          for (j=0; i*128+j<doubly_indirect_block_count && j<128; j++) {
-            success &= free_map_allocate(1, &(disk_doubly_indirect->sectors[j]));
-            if (success)
-              cache_write(filesys_disk, disk_doubly_indirect->sectors[j], zeros);
-          }
-          success &= free_map_allocate(1, &(disk_indirect->sectors[i]));
-          if (success)
-            cache_write(filesys_disk, disk_indirect->sectors[i], disk_doubly_indirect);
-          free(disk_doubly_indirect);
-        }
-        success &= free_map_allocate(1, &(disk_inode->doubly_indirect_block));
-        if (success)
-          cache_write(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
-        free(disk_indirect);
-      }
+      size_t i;
+      for (i=0; i<sectors; i++)
+        disk_inode_build(disk_inode, i);
 
       // Save and free inode
       cache_write(filesys_disk, sector, disk_inode);
@@ -192,6 +145,85 @@ inode_create (disk_sector_t sector, off_t length)
     }
   return success;
 }
+
+
+
+bool disk_inode_build(struct inode_disk *disk_inode, disk_sector_t sector) {
+  ASSERT(disk_inode != NULL);
+
+  static char zeros[DISK_SECTOR_SIZE];
+
+  // Build direct blocks
+  if (sector < DIRECT_BLOCK_NUM) {
+    int idx = sector;
+
+    if (free_map_allocate (1, &(disk_inode->direct_blocks[idx])))
+      cache_write (filesys_disk, disk_inode->direct_blocks[idx], zeros);
+
+    return true;
+  }
+
+  // Build indirect blocks
+  else if (sector < DIRECT_BLOCK_NUM + 128) {
+    int idx = sector - DIRECT_BLOCK_NUM;
+
+    struct indirect_disk *disk_indirect = calloc(1, sizeof *disk_indirect);
+    if (disk_inode->indirect_block == 0) {
+      free_map_allocate(1, &(disk_inode->indirect_block));
+      memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
+    }
+    else {
+      cache_read(filesys_disk, disk_inode->indirect_block, disk_indirect);
+    }
+
+    if (free_map_allocate(1, &(disk_indirect->sectors[idx])))
+      cache_write(filesys_disk, disk_indirect->sectors[idx], zeros);
+
+    cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
+    free(disk_indirect);
+
+    return true;
+  }
+
+  // Build doubly indirect blocks
+  else if (sector < DIRECT_BLOCK_NUM + 128 + 128*128) {
+    int idx = sector - DIRECT_BLOCK_NUM - 128;
+
+    struct indirect_disk *disk_indirect = calloc(1, sizeof *disk_indirect);
+    if (disk_inode->doubly_indirect_block == 0) {
+      free_map_allocate(1, &(disk_inode->doubly_indirect_block));
+      memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
+    }
+    else {
+      cache_read(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
+    }
+
+    struct indirect_disk *disk_doubly_indirect = calloc(1, sizeof *disk_doubly_indirect);
+    if (disk_indirect->sectors[idx/128] == 0) {
+      free_map_allocate(1, &(disk_indirect->sectors[idx/128]));
+      memcpy(disk_doubly_indirect, zeros, DISK_SECTOR_SIZE);
+    }
+    else {
+      cache_read(filesys_disk, disk_indirect->sectors[idx/128], disk_doubly_indirect);
+    }
+
+    if (free_map_allocate(1, &(disk_doubly_indirect->sectors[idx%128])))
+      cache_write(filesys_disk, disk_doubly_indirect->sectors[idx%128], zeros);
+
+    cache_write(filesys_disk, disk_indirect->sectors[idx/128], disk_doubly_indirect);
+    free(disk_doubly_indirect);
+
+    cache_write(filesys_disk, disk_inode->doubly_indirect_block, disk_indirect);
+    free(disk_indirect);
+
+    return true;
+  }
+
+  // Sector out of upper boundary
+  else
+    return false;
+}
+
 
 /* Reads an inode from SECTOR
    and returns a `struct inode' that contains it.
@@ -353,6 +385,17 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 
   if (inode->deny_write_cnt)
     return 0;
+
+  if (inode->data.length < offset+size) {
+    size_t i;
+    for (i = bytes_to_sectors(inode->data.length);
+         i < bytes_to_sectors(offset+size);
+         i++) {
+      disk_inode_build(&inode->data, i);
+    }
+    inode->data.length = offset+size;
+    cache_write(filesys_disk, inode->sector, &inode->data);
+  }
 
   while (size > 0) 
     {
