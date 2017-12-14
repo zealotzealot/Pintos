@@ -126,6 +126,11 @@ inode_create (disk_sector_t sector, off_t length)
         }
       }
 
+      success = (i == direct_block_count);
+      if (!success) {
+        // TODO: Cancel allocated resources
+      }
+
       // Build indirect blocks
       if (sectors > DIRECT_BLOCK_NUM) {
         size_t indirect_block_count = sectors-DIRECT_BLOCK_NUM;
@@ -136,11 +141,6 @@ inode_create (disk_sector_t sector, off_t length)
           free_map_allocate(1, &(disk_indirect->sectors[i]));
           cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
         }
-      }
-
-      success = (i == sectors);
-      if (!success) {
-        // TODO: Cancel allocated resources
       }
 
       // Save and free indirect block
