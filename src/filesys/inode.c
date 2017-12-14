@@ -11,16 +11,22 @@
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
 
-#define DIRECT_BLOCK_NUM 126
+#define DIRECT_BLOCK_NUM 125
 
 /* On-disk inode.
    Must be exactly DISK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
     disk_sector_t direct_blocks[DIRECT_BLOCK_NUM];
+    disk_sector_t indirect_block;
     off_t length;                       /* File size in bytes. */
     unsigned magic;                     /* Magic number. */
   };
+
+struct indirect_disk {
+  disk_sector_t sectors[128];
+};
+
 
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
@@ -77,7 +83,10 @@ bool
 inode_create (disk_sector_t sector, off_t length)
 {
   struct inode_disk *disk_inode = NULL;
+  struct indirect_disk *disk_indirect = NULL;
   bool success = false;
+  size_t i;
+  static char zeros[DISK_SECTOR_SIZE];
 
   ASSERT (length >= 0);
 
@@ -92,14 +101,26 @@ inode_create (disk_sector_t sector, off_t length)
       disk_inode->length = length;
       disk_inode->magic = INODE_MAGIC;
 
-      size_t i;
-      for (i=0; i<sectors; i++) {
+      // Build direct blocks
+      size_t direct_block_count = sectors<DIRECT_BLOCK_NUM ? sectors : DIRECT_BLOCK_NUM;
+      for (i=0; i<direct_block_count; i++) {
         if (free_map_allocate (1, &(disk_inode->direct_blocks[i]))) {
-          static char zeros[DISK_SECTOR_SIZE];
           cache_write (filesys_disk, disk_inode->direct_blocks[i], zeros);
         }
         else {
           break;
+        }
+      }
+
+      // Build indirect blocks
+      if (sectors > DIRECT_BLOCK_NUM) {
+        size_t indirect_block_count = sectors-DIRECT_BLOCK_NUM;
+        free_map_allocate(1, &(disk_inode->indirect_block));
+        disk_indirect = calloc(1, sizeof *disk_indirect);
+        memcpy(disk_indirect, zeros, DISK_SECTOR_SIZE);
+        for (i=0; i<indirect_block_count; i++) {
+          free_map_allocate(1, &(disk_indirect->sectors[i]));
+          cache_write(filesys_disk, disk_indirect->sectors[i], zeros);
         }
       }
 
@@ -108,6 +129,13 @@ inode_create (disk_sector_t sector, off_t length)
         // TODO: Cancel allocated resources
       }
 
+      // Save and free indirect block
+      if (disk_indirect != NULL) {
+        cache_write(filesys_disk, disk_inode->indirect_block, disk_indirect);
+        free(disk_indirect);
+      }
+
+      // Save and free inode
       cache_write(filesys_disk, sector, disk_inode);
       free (disk_inode);
     }
