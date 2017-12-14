@@ -230,7 +230,7 @@ inode_close (struct inode *inode)
           free_map_release (inode->sector, 1);
           size_t i;
           for (i=0; i<bytes_to_sectors(inode->data.length); i++)
-            free_map_release(inode->data.direct_blocks[i], 1);
+            free_map_release(byte_to_sector(inode, i*DISK_SECTOR_SIZE), 1);
         }
 
       free (inode); 
