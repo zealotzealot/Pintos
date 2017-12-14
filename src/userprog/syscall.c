@@ -107,7 +107,7 @@ struct file_desc * get_file_desc(int fd) {
        e != list_end(target_list);
        e = list_next(e)) {
     target = list_entry(e, struct file_desc, elem);
-    if (target->fd = fd) {
+    if (target->fd == fd) {
       return target;
     }
   }
