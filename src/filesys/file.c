@@ -1,21 +1,40 @@
 #include "filesys/file.h"
 #include <debug.h>
 #include "filesys/inode.h"
+#include "filesys/directory.h"
 #include "threads/malloc.h"
 
 /* An open file. */
 struct file 
   {
     struct inode *inode;        /* File's inode. */
+    struct dir *dir;
     off_t pos;                  /* Current position. */
     bool deny_write;            /* Has file_deny_write() been called? */
   };
+
+bool is_file_dir (struct file *file){
+  ASSERT (file != NULL);
+  ASSERT (file->inode != NULL);
+
+  if (((file->inode)->data).is_dir)
+    return true;
+
+  return false;
+}
+
+bool file_readdir (struct file *file, char name[NAME_MAX + 1]){
+  if (!is_file_dir (file))
+    return false;
+  
+  return dir_readdir (file->dir, name);
+}
 
 /* Opens a file for the given INODE, of which it takes ownership,
    and returns the new file.  Returns a null pointer if an
    allocation fails or if INODE is null. */
 struct file *
-file_open (struct inode *inode) 
+file_open (struct inode *inode)
 {
   struct file *file = calloc (1, sizeof *file);
   if (inode != NULL && file != NULL)
@@ -23,6 +42,11 @@ file_open (struct inode *inode)
       file->inode = inode;
       file->pos = 0;
       file->deny_write = false;
+
+      if (is_file_dir (file))
+        file->dir = dir_open (inode_reopen(file->inode));
+      else
+        file->dir = NULL;
       return file;
     }
   else
@@ -47,6 +71,9 @@ file_close (struct file *file)
 {
   if (file != NULL)
     {
+      if (is_file_dir (file))
+        dir_close (file->dir);
+
       file_allow_write (file);
       inode_close (file->inode);
       free (file); 
@@ -94,6 +121,9 @@ file_read_at (struct file *file, void *buffer, off_t size, off_t file_ofs)
 off_t
 file_write (struct file *file, const void *buffer, off_t size) 
 {
+  if (is_file_dir (file))
+    return -1;
+
   off_t bytes_written = inode_write_at (file->inode, buffer, size, file->pos);
   file->pos += bytes_written;
   return bytes_written;
@@ -110,6 +140,9 @@ off_t
 file_write_at (struct file *file, const void *buffer, off_t size,
                off_t file_ofs) 
 {
+  if (is_file_dir (file))
+    return -1;
+
   return inode_write_at (file->inode, buffer, size, file_ofs);
 }
 

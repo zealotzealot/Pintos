@@ -5,7 +5,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/directory.h"
 #include "userprog/process.h"
 #include "devices/disk.h"
 
@@ -138,15 +140,12 @@ syscall_handler (struct intr_frame *f UNUSED)
       halt();
       break;
     case SYS_EXIT:
-      //printf("exit\n");
       exit (get_user ((int *)(f->esp)+1));
       break;
     case SYS_EXEC:
-      //printf("exec\n");
       f->eax = exec (get_user ((int *)(f->esp)+1));
       break;
     case SYS_WAIT:
-      //printf("wait\n");
       f->eax = wait (get_user ((int *)(f->esp)+1));
       break;
     case SYS_CREATE:
@@ -281,7 +280,6 @@ int open (const char *file) {
   struct process_sema *process = current_process_sema();
   list_push_back(&(process->file_desc_list),
                  &(target->elem));
-
 
   return file_desc_idx++;
 }
@@ -457,8 +455,8 @@ void munmap (int map_id) {
 #endif
 
 
-bool chdir (char *dir) {
-
+bool chdir (char *path) {
+  return dir_chdir (path);
 }
 
 
@@ -471,17 +469,26 @@ bool mkdir (char *path) {
 
 
 bool readdir (int fd, char name[READDIR_MAX_LEN + 1]){
+  struct file_desc *target = get_file_desc(fd);
+  struct file *target_file = target->file;
 
+  return file_readdir (target_file, name);
 }
 
 
 
 bool isdir (int fd) {
+  struct file_desc *target = get_file_desc(fd);
+  struct file *target_file = target->file;
 
+  return is_file_dir (target_file);
 }
 
 
 
 int inumber (int fd) {
+  struct file_desc *target = get_file_desc(fd);
+  struct file *target_file = target->file;
 
+  return inode_get_inumber (file_get_inode(target_file));
 }

@@ -37,21 +37,29 @@ bool cache_less_func (const struct hash_elem *a,
 }
 
 void cache_read (struct disk *disk, disk_sector_t sec_no, void *buffer){
+  lock_acquire (&lock_cache);
+
   struct cache *cache = get_cache (sec_no);
   if(cache == NULL){
     cache = cache_allocate (disk, sec_no);
     disk_read (disk, sec_no, cache->buffer);
   }
   memcpy (buffer, cache->buffer, DISK_SECTOR_SIZE);
+
+  lock_release (&lock_cache);
 }
 
 void cache_write (struct disk *disk, disk_sector_t sec_no, void *buffer){
+  lock_acquire (&lock_cache);
+
   struct cache *cache = get_cache (sec_no);
   if(cache == NULL){
     cache = cache_allocate (disk, sec_no);
     disk_read (disk, sec_no, cache->buffer);
   }
   memcpy (cache->buffer, buffer, DISK_SECTOR_SIZE);
+
+  lock_release (&lock_cache);
 }
 
 struct cache *get_cache (disk_sector_t sector){
@@ -90,8 +98,6 @@ void cache_evict (){
 }
 
 struct cache *cache_allocate (struct disk *disk, disk_sector_t sec_no){
-  lock_acquire (&lock_cache);
-
   if (hash_size(&buffer_cache) == CACHE_LIMIT){
     cache_evict();
   }
@@ -103,8 +109,6 @@ struct cache *cache_allocate (struct disk *disk, disk_sector_t sec_no){
 
   list_push_back (&FIFO_list, &cache->elem_list);
   hash_insert (&buffer_cache, &cache->elem_hash);
-
-  lock_release (&lock_cache);
 
   return cache;
 }

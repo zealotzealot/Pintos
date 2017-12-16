@@ -219,9 +219,7 @@ start_process (void *process_sema_)
     thread_exit();
   }
 
-  lock_release (&process_lock);
   sema_up(&process_sema->sema);
-  lock_acquire (&process_lock);
 
   argument_pass(f_name, &if_.esp);
   
@@ -292,9 +290,7 @@ process_exit (void)
   struct process_sema *process_sema = curr -> process_sema;
 
   if(process_sema != NULL){
-    lock_release (&process_lock);
     sema_up_all (&process_sema->sema);
-    lock_acquire (&process_lock);
     process_sema->alive = 0;
 
     struct list *file_desc_list = &(process_sema->file_desc_list);
@@ -315,7 +311,8 @@ process_exit (void)
       munmap (mte->map_id);
     }
 #endif
-    //dir_close (process_sema -> dir);
+    if (process_sema -> dir != NULL)
+      dir_close (process_sema -> dir);
   }
 
   enum intr_level old_level = intr_disable();

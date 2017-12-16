@@ -11,15 +11,18 @@
    After directories are implemented, this maximum length may be
    retained, but much longer full path names must be allowed. */
 #define NAME_MAX 14
+#define PATH_MAX 100
 
 struct inode;
 
 /* A directory. */
-struct dir 
+struct dir
   {
     struct inode *inode;                /* Backing store. */
     off_t pos;                          /* Current position. */
   };
+
+bool dir_chdir (char *);
 
 bool split_path_name (char *, char *, char *);
 
