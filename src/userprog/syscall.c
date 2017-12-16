@@ -7,6 +7,7 @@
 
 #include "filesys/filesys.h"
 #include "userprog/process.h"
+#include "devices/disk.h"
 
 #ifdef VM
 #include "vm/page.h"
@@ -246,7 +247,7 @@ bool create (const char *file, unsigned initial_size) {
     exit(-1);
 
   lock_acquire(&file_lock);
-  bool result = filesys_create(file, initial_size);
+  bool result = filesys_create(file, initial_size, false);
   lock_release(&file_lock);
   return result;
 }
@@ -462,8 +463,9 @@ bool chdir (char *dir) {
 
 
 
-bool mkdir (char *dir) {
-
+bool mkdir (char *path) {
+  bool success = filesys_create (path, DISK_SECTOR_SIZE, true);
+  return success;
 }
 
 

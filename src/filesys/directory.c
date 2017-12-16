@@ -5,21 +5,45 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
-
-/* A directory. */
-struct dir 
-  {
-    struct inode *inode;                /* Backing store. */
-    off_t pos;                          /* Current position. */
-  };
+#include "userprog/process.h"
 
 /* A single directory entry. */
 struct dir_entry 
-  {
+    {
     disk_sector_t inode_sector;         /* Sector number of header. */
     char name[NAME_MAX + 1];            /* Null terminated file name. */
     bool in_use;                        /* In use or free? */
   };
+
+bool split_path_name (char *path_, char *path, char *name){
+  if (!strlen (path_))
+    return false;
+
+  char *last_slash = strrchr (path_, '/');
+
+  if (last_slash == NULL){
+    if (strlen (path_) > NAME_MAX)
+      return false;
+
+    path [0] = '\0';
+    strlcpy (name, path_, strlen (path_) + 1);
+  }
+
+  else{
+    int last_slash_index = last_slash - path_ + 1;
+
+    if (strlen(path_) - last_slash_index + 1 > NAME_MAX)
+      return false;
+
+    strlcpy (path, path_, last_slash_index);
+    strlcpy (name, path_ + last_slash_index, strlen(path_) - last_slash_index + 1);
+  
+    path [last_slash_index] = '\0';
+    name [strlen (path_) - last_slash_index + 1] = '\0';
+  }
+  
+  return true;
+}
 
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
@@ -49,12 +73,73 @@ dir_open (struct inode *inode)
     }
 }
 
+struct dir *dir_open_path (char *path_){
+  if (!strlen (path_))
+    return dir_open_current ();
+
+  char path [strlen (path_) + 1];
+  strlcpy (path, path_, strlen(path_) + 1);
+
+  struct dir *dir, *dir_next;
+  if (path[0] == '/'){ //absolute
+    dir = dir_open_root ();
+  }
+  else{
+    dir = dir_open_current ();
+  }
+
+  int i, cnt = 0;
+  for (i = 0; i < strlen (path); i ++){
+    if (path[i] == '/')
+      ++cnt;
+  }
+
+  struct inode *inode;
+  char *token, *save_ptr;
+
+  for (token = strtok_r (path, "/", &save_ptr); token != NULL;
+       token = strtok_r (NULL, "/", &save_ptr)){
+    if (--cnt < 0)
+      break;
+
+    if (strlen (token) > NAME_MAX)
+      return NULL;
+
+    if (!strlen (token))
+      continue;
+
+    if (!dir_lookup (dir, token, inode)){
+      dir_close (dir);
+      return NULL;
+    }
+    dir_next = dir_open (inode);
+
+    if(dir_next == NULL){
+      dir_close (dir);
+      return NULL;
+    }
+
+    dir_close (dir);
+    dir = dir_next;
+  }
+
+  return dir;
+}
+
 /* Opens the root directory and returns a directory for it.
    Return true if successful, false on failure. */
 struct dir *
 dir_open_root (void)
 {
   return dir_open (inode_open (ROOT_DIR_SECTOR));
+}
+
+struct dir *
+dir_open_current (void){
+  if (thread_current() -> tid == 1)
+    return dir_open_root();
+  
+  return dir_reopen ((thread_current()->process_sema)->dir);
 }
 
 /* Opens and returns a new directory for the same inode as DIR.
