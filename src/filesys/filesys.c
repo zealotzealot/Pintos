@@ -5,6 +5,7 @@
 #include "filesys/file.h"
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
+#include "filesys/cache.h"
 #include "filesys/directory.h"
 #include "devices/disk.h"
 
@@ -37,6 +38,7 @@ void
 filesys_done (void) 
 {
   free_map_close ();
+  cache_destroy ();
 }
 
 /* Creates a file named NAME with the given INITIAL_SIZE.
@@ -96,6 +98,7 @@ filesys_open (const char *path_)
     free(name);
     return NULL;
   }
+
   struct dir *dir = dir_open_path (path);
   struct inode *inode = NULL;
 

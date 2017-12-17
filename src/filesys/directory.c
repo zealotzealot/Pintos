@@ -44,7 +44,6 @@ bool split_path_name (char *path_, char *path, char *name){
 
   else{
     int last_slash_index = last_slash - path_ + 1;
-
     if (strlen(path_) - last_slash_index + 1 > NAME_MAX)
       return false;
 

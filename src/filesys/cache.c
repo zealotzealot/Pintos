@@ -25,6 +25,18 @@ bool cache_less_func (const struct hash_elem *,
 void cache_evict ();
 struct cache *cache_allocate (struct disk *, disk_sector_t);
 
+hash_action_func *cache_free (struct hash_elem *h, void *aux UNUSED){
+  struct cache *cache = hash_entry (h, struct cache, elem_hash);
+
+  disk_write (cache->disk, cache->sec_no, cache->buffer);
+
+  free (cache);
+}
+
+void cache_destroy (){
+  hash_destroy (&buffer_cache, cache_free);
+}
+
 unsigned cache_hash_func (const struct hash_elem *p_, void *aux UNUSED){
   const struct cache *p = hash_entry (p_, struct cache, elem_hash);
   return hash_bytes (&p->sec_no, sizeof p->sec_no);
