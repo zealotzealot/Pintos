@@ -5,6 +5,7 @@
 #include "threads/synch.h"
 #include "userprog/syscall.h"
 #include "lib/kernel/hash.h"
+#include "filesys/directory.h"
 
 void process_sema_list_init();
 struct process_sema *current_process_sema();
@@ -24,11 +25,13 @@ struct process_sema
   int parent_alive; //0 means parent die, 1 means not
   int exit_status;
   int load_success; //0 means not load yet or success, -1 : fail
+  char *cmd_line;
   struct semaphore sema;
   struct list_elem elem; 
   struct list file_desc_list;
   struct file *executable_file;
 
+  struct dir *dir;
 #ifdef VM
   struct hash page_hash;
   struct list mmap_list;

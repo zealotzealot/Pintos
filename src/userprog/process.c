@@ -9,7 +9,6 @@
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
 #include "userprog/syscall.h"
-#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/flags.h"
@@ -32,7 +31,10 @@ void set_exit_status (int);
 
 static struct list process_sema_list;
 
+struct lock process_lock;
+
 void process_sema_list_init() {
+  lock_init(&process_lock);
   list_init(&process_sema_list);
 }
 
@@ -43,12 +45,12 @@ void process_sema_init (struct process_sema *process_sema){
   process_sema->parent_pid = -1;
   process_sema->parent_alive = 1;
   process_sema->load_success = 0;
+  process_sema->dir = NULL;
   list_init(&process_sema->file_desc_list);
 #ifdef VM
   page_init(&process_sema->page_hash);
   list_init(&process_sema->mmap_list);
 #endif
-  thread_current()->process_sema = process_sema;
 }
 
 void set_exit_status (int status){
@@ -63,13 +65,13 @@ void set_exit_status (int status){
 
 struct process_sema*
 pid_to_process_sema (int pid){
-  struct list_elem *e;
-  
+  struct list_elem *e; 
   for(e=list_begin(&process_sema_list); e!=list_end(&process_sema_list); e=list_next(e)){
     if(list_entry(e, struct process_sema, elem)->pid == pid){
       return list_entry(e, struct process_sema, elem);
     }
   }
+
   return NULL;
 }
 
@@ -145,41 +147,51 @@ process_execute (const char *file_name)
   
   char *save_ptr;
   real_file_name = strtok_r (real_file_name, " ", &save_ptr);
+
+  lock_acquire (&process_lock);
+  struct process_sema *process_sema =
+              (struct process_sema *) malloc (sizeof (struct process_sema));
   
+  process_sema_init (process_sema);
+  process_sema -> parent_pid = thread_current()->tid;
+ 
+  if (thread_current() -> tid == 1){
+    process_sema -> dir = dir_open_root ();
+  }
+  else{
+    process_sema -> dir = dir_open_current ();
+  }
+  ASSERT (process_sema ->dir != NULL);
+
+  process_sema -> cmd_line = fn_copy;
+  lock_release (&process_lock);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (real_file_name, PRI_DEFAULT, start_process, process_sema);
 
   if(tid == TID_ERROR) { exit(-1); }
 
-  struct process_sema *process_sema = pid_to_process_sema(tid);
-  if (process_sema == NULL){ //부모가 자식보다 먼저 schedule되는 case
-    process_sema = malloc (sizeof(struct process_sema));
-    process_sema_init (process_sema);
-  
-    process_sema->pid = tid;
-    process_sema->parent_pid = thread_current()->tid;
-    list_push_back (&process_sema_list, &process_sema->elem);
-  }
-  else{//자식이 부모보다 먼저
-    if(process_sema->load_success == -1){
-      return -1;
-    }
-
-    process_sema->parent_pid = thread_current()->tid;
-  }
   sema_down(&process_sema->sema);
   
+  lock_acquire (&process_lock);
   if(process_sema->load_success == -1){
+    lock_release (&process_lock);
     return -1;
   }
+  lock_release (&process_lock);
   return tid;
 }
 
 /* A thread function that loads a user process and makes it start
    running. */
 static void
-start_process (void *f_name)
+start_process (void *process_sema_)
 {
+  lock_acquire (&process_lock);
+
+  struct process_sema *process_sema = (struct process_sema *) process_sema_;
+  void *f_name = process_sema -> cmd_line;
+
   char *save_ptr, *file_name = malloc(sizeof(char) * (strlen(f_name)+1));
   strlcpy(file_name, f_name, strlen(f_name)+1);
   file_name = strtok_r (file_name, " ", &save_ptr);
@@ -187,17 +199,9 @@ start_process (void *f_name)
   struct intr_frame if_;
   bool success;
 
-  int pid = thread_current()->tid;
-  struct process_sema *process_sema = pid_to_process_sema(pid);
-  if (process_sema == NULL){ //자식이 부모보다 먼저 schedule되는 case
-    process_sema = malloc (sizeof(struct process_sema));
-    process_sema_init (process_sema);
-  
-    process_sema->pid = pid;
-    list_push_back (&process_sema_list, &process_sema->elem);
-  }
-  else{
-  }
+  process_sema -> pid = thread_current () -> tid;
+  thread_current() -> process_sema = process_sema;
+  list_push_back (&process_sema_list, &process_sema ->elem);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -207,10 +211,11 @@ start_process (void *f_name)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  
+
   if (!success){
     process_sema->load_success = -1;
     free(file_name);
+    lock_release (&process_lock);
     thread_exit();
   }
 
@@ -222,6 +227,7 @@ start_process (void *f_name)
   //palloc_free_page (file_name);
   free(file_name);
 
+  lock_release (&process_lock);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -244,22 +250,28 @@ start_process (void *f_name)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  lock_acquire (&process_lock);
   struct process_sema *process_sema = pid_to_process_sema(child_tid);
   if  (process_sema == NULL){
+    lock_release (&process_lock);
     return -1;
   }
 
   if(process_sema->parent_pid != thread_current()->tid){
+    lock_release (&process_lock);
     return -1;
   }
     
   if(process_sema->alive){
+    lock_release (&process_lock);
     sema_down (&process_sema->sema);
+    lock_acquire (&process_lock);
   }
 
   int exit_status = process_sema->exit_status;
   list_remove(&(process_sema->elem));
   free(process_sema);
+  lock_release (&process_lock);
     
   return exit_status;
 }
@@ -268,12 +280,14 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+  lock_acquire (&process_lock);
 #ifdef VM
   lock_acquire (&lock_frame);
   lock_acquire (&swap_lock);
 #endif
   struct thread *curr = thread_current ();
-  struct process_sema *process_sema = pid_to_process_sema(curr->tid);
+
+  struct process_sema *process_sema = curr -> process_sema;
 
   if(process_sema != NULL){
     sema_up_all (&process_sema->sema);
@@ -297,6 +311,8 @@ process_exit (void)
       munmap (mte->map_id);
     }
 #endif
+    if (process_sema -> dir != NULL)
+      dir_close (process_sema -> dir);
   }
 
   enum intr_level old_level = intr_disable();
@@ -332,6 +348,8 @@ process_exit (void)
   lock_release (&lock_frame);
   lock_release (&swap_lock);
 #endif
+
+  lock_release (&process_lock);
   intr_set_level(old_level);
 }
 
@@ -442,6 +460,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Open executable file. */
   file = filesys_open (file_name);
+
   current_process_sema()->executable_file = file;
   if (file != NULL)
     file_deny_write(file);
@@ -534,6 +553,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
+
   return success;
 }
 
